@@ -11,9 +11,12 @@ export interface ChatMessage {
 export interface BenchmarkResult {
   modelName: string;
   prompt: string;
+  category: string;
   tokensGenerated: number;
   timeMs: number;
   tokensPerSecond: number;
+  ttftMs: number;          // Time to first token
+  tpotMs: number;          // Time per output token (excluding first)
   response: string;
 }
 
@@ -197,35 +200,42 @@ export function useLlmInference() {
     }
   }, [messages, isGenerating]);
 
-  const runBenchmarkPrompt = useCallback(async (promptText: string): Promise<BenchmarkResult | null> => {
+  const runBenchmarkPrompt = useCallback(async (promptText: string, category: string = "general"): Promise<BenchmarkResult | null> => {
     if (!llmRef.current) return null;
 
     const fullPrompt = `<start_of_turn>user\n${promptText}<end_of_turn>\n<start_of_turn>model\n`;
     const startTime = performance.now();
     let tokenCount = 0;
     let fullResponse = "";
+    let firstTokenTime: number | null = null;
 
     try {
       await llmRef.current.generateResponse(
         fullPrompt,
         (partialResult: string, done: boolean) => {
+          if (firstTokenTime === null) {
+            firstTokenTime = performance.now();
+          }
           fullResponse += partialResult;
           tokenCount++;
-          if (done) {
-            // done
-          }
         }
       );
 
       const endTime = performance.now();
       const timeMs = endTime - startTime;
+      const ttftMs = firstTokenTime !== null ? firstTokenTime - startTime : timeMs;
+      const decodingTimeMs = timeMs - ttftMs;
+      const tpotMs = tokenCount > 1 ? decodingTimeMs / (tokenCount - 1) : 0;
 
       return {
         modelName: currentModelName,
         prompt: promptText,
+        category,
         tokensGenerated: tokenCount,
         timeMs,
         tokensPerSecond: tokenCount / (timeMs / 1000),
+        ttftMs,
+        tpotMs,
         response: fullResponse,
       };
     } catch (err) {
