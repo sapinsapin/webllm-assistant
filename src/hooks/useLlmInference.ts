@@ -17,38 +17,108 @@ export interface BenchmarkResult {
   response: string;
 }
 
+async function downloadModelWithProgress(
+  url: string,
+  hfToken: string | null,
+  onProgress: (pct: number, downloaded: number, total: number) => void
+): Promise<Uint8Array> {
+  const headers: Record<string, string> = {};
+  if (hfToken) {
+    headers["Authorization"] = `Bearer ${hfToken}`;
+  }
+
+  const response = await fetch(url, { headers });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error(
+        "Authentication required. This model is gated — you need a HuggingFace token with access to this model. " +
+        "Go to huggingface.co, accept the model's terms, then create a read token at huggingface.co/settings/tokens."
+      );
+    }
+    throw new Error(`Failed to download model: ${response.status} ${response.statusText}`);
+  }
+
+  const contentLength = response.headers.get("content-length");
+  const total = contentLength ? parseInt(contentLength, 10) : 0;
+  const reader = response.body?.getReader();
+
+  if (!reader) throw new Error("ReadableStream not supported");
+
+  const chunks: Uint8Array[] = [];
+  let downloaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    downloaded += value.length;
+    if (total > 0) {
+      onProgress(Math.round((downloaded / total) * 100), downloaded, total);
+    } else {
+      onProgress(-1, downloaded, 0);
+    }
+  }
+
+  const result = new Uint8Array(downloaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return result;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 export function useLlmInference() {
   const [status, setStatus] = useState<ModelStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentModelName, setCurrentModelName] = useState("");
   const llmRef = useRef<LlmInference | null>(null);
 
-  const loadModel = useCallback(async (modelUrl: string, modelName?: string) => {
+  const loadModel = useCallback(async (modelUrl: string, modelName?: string, hfToken?: string) => {
     try {
       setStatus("loading");
+      setDownloadProgress(0);
       setStatusMessage("Initializing WebGPU runtime...");
       setCurrentModelName(modelName || modelUrl.split("/").pop() || "Unknown");
 
       if (!(navigator as any).gpu) {
+        throw new Error("WebGPU is not supported in this browser. Please use Chrome 113+ or Edge 113+.");
       }
 
       const genai = await FilesetResolver.forGenAiTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
       );
 
-      setStatusMessage("Loading model (this may take a few minutes)...");
+      setStatusMessage("Downloading model...");
 
-      llmRef.current = await LlmInference.createFromOptions(genai, {
-        baseOptions: {
-          modelAssetPath: modelUrl,
-        },
-        maxTokens: 1024,
-        topK: 40,
-        temperature: 0.8,
-        randomSeed: 101,
-      });
+      const modelBuffer = await downloadModelWithProgress(
+        modelUrl,
+        hfToken || null,
+        (pct, downloaded, total) => {
+          setDownloadProgress(Math.max(pct, 0));
+          if (total > 0) {
+            setStatusMessage(`Downloading model: ${formatBytes(downloaded)} / ${formatBytes(total)} (${pct}%)`);
+          } else {
+            setStatusMessage(`Downloading model: ${formatBytes(downloaded)}`);
+          }
+        }
+      );
+
+      setStatusMessage("Initializing model (may take a minute)...");
+      setDownloadProgress(100);
+
+      llmRef.current = await LlmInference.createFromModelBuffer(genai, modelBuffer);
 
       setStatus("ready");
       setStatusMessage("Model loaded successfully");
@@ -56,6 +126,7 @@ export function useLlmInference() {
       setStatus("error");
       const msg = err instanceof Error ? err.message : "Failed to load model";
       setStatusMessage(msg);
+      setDownloadProgress(0);
       console.error("LLM load error:", err);
     }
   }, []);
@@ -66,6 +137,7 @@ export function useLlmInference() {
     setStatusMessage("");
     setMessages([]);
     setCurrentModelName("");
+    setDownloadProgress(0);
   }, []);
 
   const sendMessage = useCallback(async (userMessage: string) => {
@@ -152,7 +224,7 @@ export function useLlmInference() {
   }, [currentModelName]);
 
   return {
-    status, statusMessage, messages, isGenerating, currentModelName,
+    status, statusMessage, downloadProgress, messages, isGenerating, currentModelName,
     loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
   };
 }

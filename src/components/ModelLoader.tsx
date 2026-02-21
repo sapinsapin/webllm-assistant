@@ -1,24 +1,27 @@
 import { useState } from "react";
-import { Cpu, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Cpu, Loader2, CheckCircle2, AlertCircle, Key } from "lucide-react";
 import type { ModelStatus } from "@/hooks/useLlmInference";
 import { PRESET_MODELS } from "@/lib/models";
 
 interface ModelLoaderProps {
   status: ModelStatus;
   statusMessage: string;
-  onLoadModel: (url: string, name?: string) => void;
+  downloadProgress: number;
+  onLoadModel: (url: string, name?: string, hfToken?: string) => void;
 }
 
-export function ModelLoader({ status, statusMessage, onLoadModel }: ModelLoaderProps) {
+export function ModelLoader({ status, statusMessage, downloadProgress, onLoadModel }: ModelLoaderProps) {
   const [customUrl, setCustomUrl] = useState("");
+  const [hfToken, setHfToken] = useState("");
   const [selectedPreset, setSelectedPreset] = useState(0);
+  const [showToken, setShowToken] = useState(false);
 
   const handleLoad = () => {
     if (customUrl.trim()) {
-      onLoadModel(customUrl.trim(), "Custom Model");
+      onLoadModel(customUrl.trim(), "Custom Model", hfToken.trim() || undefined);
     } else {
       const model = PRESET_MODELS[selectedPreset];
-      onLoadModel(model.url, model.name);
+      onLoadModel(model.url, model.name, hfToken.trim() || undefined);
     }
   };
 
@@ -70,9 +73,45 @@ export function ModelLoader({ status, statusMessage, onLoadModel }: ModelLoaderP
                   <span className="text-xs text-muted-foreground/60 font-mono">{model.size}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground/70">{model.description}</p>
+                {model.gated && (
+                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-accent font-mono">
+                    <Key className="h-2.5 w-2.5" /> Requires HuggingFace token
+                  </span>
+                )}
               </button>
             ))}
           </div>
+        </div>
+
+        {/* HuggingFace Token */}
+        <div className="space-y-2">
+          <button
+            onClick={() => setShowToken(!showToken)}
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Key className="h-3 w-3" />
+            {showToken ? "Hide" : "Add"} HuggingFace Token
+            {hfToken && <CheckCircle2 className="h-3 w-3 text-primary" />}
+          </button>
+          {showToken && (
+            <div className="space-y-1.5">
+              <input
+                type="password"
+                value={hfToken}
+                onChange={(e) => setHfToken(e.target.value)}
+                placeholder="hf_..."
+                disabled={status === "loading"}
+                className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+              />
+              <p className="text-[10px] text-muted-foreground/50">
+                Required for gated models. Get one at{" "}
+                <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-primary/70 hover:text-primary underline">
+                  huggingface.co/settings/tokens
+                </a>
+                . Token stays in your browser only.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -89,6 +128,18 @@ export function ModelLoader({ status, statusMessage, onLoadModel }: ModelLoaderP
           />
         </div>
 
+        {/* Download progress bar */}
+        {status === "loading" && downloadProgress > 0 && (
+          <div className="space-y-1">
+            <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <button
           onClick={handleLoad}
           disabled={status === "loading"}
@@ -97,7 +148,7 @@ export function ModelLoader({ status, statusMessage, onLoadModel }: ModelLoaderP
           {status === "loading" ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="font-mono">{statusMessage}</span>
+              <span className="font-mono text-xs">{statusMessage}</span>
             </span>
           ) : (
             "Load Model"
@@ -107,7 +158,7 @@ export function ModelLoader({ status, statusMessage, onLoadModel }: ModelLoaderP
         {status === "error" && (
           <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span className="font-mono">{statusMessage}</span>
+            <span className="font-mono text-xs">{statusMessage}</span>
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ export interface ModelPreset {
   size: string;
   url: string;
   description: string;
+  gated: boolean;
 }
 
 export const PRESET_MODELS: ModelPreset[] = [
@@ -13,6 +14,7 @@ export const PRESET_MODELS: ModelPreset[] = [
     size: "~200MB",
     url: "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270M-it-int4-Web.litertlm",
     description: "Tiny model, fastest loading & inference. Great for testing.",
+    gated: true,
   },
   {
     id: "gemma-3n-e2b",
@@ -20,6 +22,7 @@ export const PRESET_MODELS: ModelPreset[] = [
     size: "~1.5GB",
     url: "https://huggingface.co/google/gemma-3n-E2B-it-litert-lm/resolve/main/gemma-3n-E2B-it-int4-Web.litertlm",
     description: "Small model with good quality-to-size ratio.",
+    gated: true,
   },
   {
     id: "gemma-3n-e4b",
@@ -27,6 +30,7 @@ export const PRESET_MODELS: ModelPreset[] = [
     size: "~3GB",
     url: "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4-Web.litertlm",
     description: "Larger model, better quality but slower to load.",
+    gated: true,
   },
 ];
 
