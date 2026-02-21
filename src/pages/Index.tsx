@@ -1,14 +1,20 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import { ModelLoader } from "@/components/ModelLoader";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
-import { Cpu } from "lucide-react";
+import { BenchmarkPanel } from "@/components/BenchmarkPanel";
+import { Cpu, MessageSquare, BarChart3, RotateCcw } from "lucide-react";
+
+type Tab = "chat" | "benchmark";
 
 const Index = () => {
-  const { status, statusMessage, messages, isGenerating, loadModel, sendMessage } =
-    useLlmInference();
+  const {
+    status, statusMessage, messages, isGenerating, currentModelName,
+    loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
+  } = useLlmInference();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("chat");
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -25,16 +31,51 @@ const Index = () => {
           <span className="text-primary">Edge</span>
           <span className="text-foreground">LLM</span>
         </span>
+
         {status === "ready" && (
-          <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
-            Model active
-          </span>
+          <>
+            {/* Tabs */}
+            <div className="ml-6 flex items-center gap-1 rounded-lg border border-border bg-secondary/30 p-0.5">
+              <button
+                onClick={() => setActiveTab("chat")}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                  activeTab === "chat"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <MessageSquare className="h-3 w-3" /> Chat
+              </button>
+              <button
+                onClick={() => setActiveTab("benchmark")}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                  activeTab === "benchmark"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <BarChart3 className="h-3 w-3" /> Benchmark
+              </button>
+            </div>
+
+            <div className="ml-auto flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
+                {currentModelName}
+              </span>
+              <button
+                onClick={unloadModel}
+                className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
+              >
+                <RotateCcw className="h-3 w-3" /> Switch
+              </button>
+            </div>
+          </>
         )}
       </header>
 
       {/* Main content */}
-      <main className="flex flex-1 flex-col">
+      <main className="flex flex-1 flex-col overflow-hidden">
         {status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">
             <ModelLoader
@@ -43,9 +84,8 @@ const Index = () => {
               onLoadModel={loadModel}
             />
           </div>
-        ) : (
+        ) : activeTab === "chat" ? (
           <>
-            {/* Chat messages */}
             <div
               ref={scrollRef}
               className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin"
@@ -61,14 +101,17 @@ const Index = () => {
                 <ChatMessage key={i} message={msg} />
               ))}
             </div>
-
-            {/* Input */}
             <div className="border-t border-border p-4">
               <div className="mx-auto max-w-3xl">
                 <ChatInput onSend={sendMessage} disabled={isGenerating} />
               </div>
             </div>
           </>
+        ) : (
+          <BenchmarkPanel
+            modelName={currentModelName}
+            onRunPrompt={runBenchmarkPrompt}
+          />
         )}
       </main>
     </div>
