@@ -10,7 +10,7 @@ type Tab = "chat" | "benchmark";
 
 const Index = () => {
   const {
-    status, statusMessage, messages, isGenerating, currentModelName,
+    status, statusMessage, downloadProgress, messages, isGenerating, currentModelName,
     loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
   } = useLlmInference();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -81,6 +81,7 @@ const Index = () => {
             <ModelLoader
               status={status}
               statusMessage={statusMessage}
+              downloadProgress={downloadProgress}
               onLoadModel={loadModel}
             />
           </div>
