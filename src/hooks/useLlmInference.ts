@@ -116,9 +116,13 @@ export function useLlmInference() {
 
       setStatusMessage("Downloading model...");
 
+      // Fallback HF token for gated models when user doesn't provide one
+      const FALLBACK_HF_TOKEN = "hf_REPLACE_WITH_YOUR_TOKEN";
+      const effectiveToken = hfToken || FALLBACK_HF_TOKEN;
+
       const modelBuffer = await downloadModelWithProgress(
         modelUrl,
-        hfToken || null,
+        effectiveToken,
         (pct, downloaded, total) => {
           setDownloadProgress(Math.max(pct, 0));
           if (total > 0) {
