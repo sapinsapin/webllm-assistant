@@ -12,7 +12,7 @@ export const PRESET_MODELS: ModelPreset[] = [
     id: "gemma-270m",
     name: "Gemma 3 270M",
     size: "~200MB",
-    url: "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270M-it-int4-Web.litertlm",
+    url: "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q4_0-web.task",
     description: "Tiny model, fastest loading & inference. Great for testing.",
     gated: true,
   },
