@@ -7,30 +7,40 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface BenchmarkResult {
+  modelName: string;
+  prompt: string;
+  tokensGenerated: number;
+  timeMs: number;
+  tokensPerSecond: number;
+  response: string;
+}
+
 export function useLlmInference() {
   const [status, setStatus] = useState<ModelStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const llmRef = useRef<any>(null);
+  const [currentModelName, setCurrentModelName] = useState("");
+  const llmRef = useRef<LlmInferenceInstance | null>(null);
 
-  const loadModel = useCallback(async (modelUrl: string) => {
+  const loadModel = useCallback(async (modelUrl: string, modelName?: string) => {
     try {
       setStatus("loading");
       setStatusMessage("Initializing WebGPU runtime...");
+      setCurrentModelName(modelName || modelUrl.split("/").pop() || "Unknown");
 
-      // Check WebGPU support
       if (!navigator.gpu) {
         throw new Error("WebGPU is not supported in this browser. Please use Chrome 113+ or Edge 113+.");
       }
 
-      const genai = await window.FilesetResolver.forGenAiTasks(
+      const genai = await FilesetResolver.forGenAiTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
       );
 
       setStatusMessage("Loading model (this may take a few minutes)...");
 
-      llmRef.current = await window.LlmInference.createFromOptions(genai, {
+      llmRef.current = await LlmInference.createFromOptions(genai, {
         baseOptions: {
           modelAssetPath: modelUrl,
         },
@@ -42,11 +52,20 @@ export function useLlmInference() {
 
       setStatus("ready");
       setStatusMessage("Model loaded successfully");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus("error");
-      setStatusMessage(err.message || "Failed to load model");
+      const msg = err instanceof Error ? err.message : "Failed to load model";
+      setStatusMessage(msg);
       console.error("LLM load error:", err);
     }
+  }, []);
+
+  const unloadModel = useCallback(() => {
+    llmRef.current = null;
+    setStatus("idle");
+    setStatusMessage("");
+    setMessages([]);
+    setCurrentModelName("");
   }, []);
 
   const sendMessage = useCallback(async (userMessage: string) => {
@@ -59,7 +78,6 @@ export function useLlmInference() {
     setMessages(newMessages);
     setIsGenerating(true);
 
-    // Build prompt with conversation history
     const prompt = newMessages
       .map((m) =>
         m.role === "user"
@@ -85,15 +103,56 @@ export function useLlmInference() {
           }
         }
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Generation error:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
       setMessages([
         ...newMessages,
-        { role: "assistant", content: "Error generating response: " + err.message },
+        { role: "assistant", content: "Error generating response: " + msg },
       ]);
       setIsGenerating(false);
     }
   }, [messages, isGenerating]);
 
-  return { status, statusMessage, messages, isGenerating, loadModel, sendMessage };
+  const runBenchmarkPrompt = useCallback(async (promptText: string): Promise<BenchmarkResult | null> => {
+    if (!llmRef.current) return null;
+
+    const fullPrompt = `<start_of_turn>user\n${promptText}<end_of_turn>\n<start_of_turn>model\n`;
+    const startTime = performance.now();
+    let tokenCount = 0;
+    let fullResponse = "";
+
+    try {
+      await llmRef.current.generateResponse(
+        fullPrompt,
+        (partialResult: string, done: boolean) => {
+          fullResponse += partialResult;
+          tokenCount++;
+          if (done) {
+            // done
+          }
+        }
+      );
+
+      const endTime = performance.now();
+      const timeMs = endTime - startTime;
+
+      return {
+        modelName: currentModelName,
+        prompt: promptText,
+        tokensGenerated: tokenCount,
+        timeMs,
+        tokensPerSecond: tokenCount / (timeMs / 1000),
+        response: fullResponse,
+      };
+    } catch (err) {
+      console.error("Benchmark error:", err);
+      return null;
+    }
+  }, [currentModelName]);
+
+  return {
+    status, statusMessage, messages, isGenerating, currentModelName,
+    loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
+  };
 }

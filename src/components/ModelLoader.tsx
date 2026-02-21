@@ -1,31 +1,25 @@
 import { useState } from "react";
 import { Cpu, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import type { ModelStatus } from "@/hooks/useLlmInference";
+import { PRESET_MODELS } from "@/lib/models";
 
 interface ModelLoaderProps {
   status: ModelStatus;
   statusMessage: string;
-  onLoadModel: (url: string) => void;
+  onLoadModel: (url: string, name?: string) => void;
 }
-
-const PRESET_MODELS = [
-  {
-    name: "Gemma 3n E2B (smallest, ~1.5GB)",
-    url: "https://huggingface.co/google/gemma-3n-E2B-it-litert-lm/resolve/main/gemma-3n-E2B-it-int4-Web.litertlm",
-  },
-  {
-    name: "Gemma 3n E4B (~3GB)",
-    url: "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4-Web.litertlm",
-  },
-];
 
 export function ModelLoader({ status, statusMessage, onLoadModel }: ModelLoaderProps) {
   const [customUrl, setCustomUrl] = useState("");
   const [selectedPreset, setSelectedPreset] = useState(0);
 
   const handleLoad = () => {
-    const url = customUrl.trim() || PRESET_MODELS[selectedPreset].url;
-    onLoadModel(url);
+    if (customUrl.trim()) {
+      onLoadModel(customUrl.trim(), "Custom Model");
+    } else {
+      const model = PRESET_MODELS[selectedPreset];
+      onLoadModel(model.url, model.name);
+    }
   };
 
   if (status === "ready") {
@@ -60,16 +54,22 @@ export function ModelLoader({ status, statusMessage, onLoadModel }: ModelLoaderP
           <div className="space-y-2">
             {PRESET_MODELS.map((model, i) => (
               <button
-                key={i}
+                key={model.id}
                 onClick={() => setSelectedPreset(i)}
                 disabled={status === "loading"}
-                className={`w-full rounded-lg border px-4 py-3 text-left text-sm transition-all ${
+                className={`w-full rounded-lg border px-4 py-3 text-left transition-all ${
                   selectedPreset === i
-                    ? "border-primary/50 bg-primary/10 text-foreground"
-                    : "border-border bg-secondary/50 text-muted-foreground hover:border-muted-foreground/30"
+                    ? "border-primary/50 bg-primary/10"
+                    : "border-border bg-secondary/50 hover:border-muted-foreground/30"
                 }`}
               >
-                <span className="font-mono">{model.name}</span>
+                <div className="flex items-baseline justify-between">
+                  <span className={`font-mono text-sm ${selectedPreset === i ? "text-foreground" : "text-muted-foreground"}`}>
+                    {model.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground/60 font-mono">{model.size}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground/70">{model.description}</p>
               </button>
             ))}
           </div>
