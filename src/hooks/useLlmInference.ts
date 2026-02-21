@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "error";
 
@@ -22,7 +23,7 @@ export function useLlmInference() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentModelName, setCurrentModelName] = useState("");
-  const llmRef = useRef<LlmInferenceInstance | null>(null);
+  const llmRef = useRef<LlmInference | null>(null);
 
   const loadModel = useCallback(async (modelUrl: string, modelName?: string) => {
     try {
@@ -30,8 +31,7 @@ export function useLlmInference() {
       setStatusMessage("Initializing WebGPU runtime...");
       setCurrentModelName(modelName || modelUrl.split("/").pop() || "Unknown");
 
-      if (!navigator.gpu) {
-        throw new Error("WebGPU is not supported in this browser. Please use Chrome 113+ or Edge 113+.");
+      if (!(navigator as any).gpu) {
       }
 
       const genai = await FilesetResolver.forGenAiTasks(
