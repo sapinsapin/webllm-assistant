@@ -32,8 +32,19 @@ async function downloadModelWithProgress(
   if (!response.ok) {
     if (response.status === 401) {
       throw new Error(
-        "Authentication required. This model is gated — you need a HuggingFace token with access to this model. " +
+        "Authentication required. This model is gated — you need a HuggingFace token with access. " +
         "Go to huggingface.co, accept the model's terms, then create a read token at huggingface.co/settings/tokens."
+      );
+    }
+    if (response.status === 403) {
+      const body = await response.text();
+      const match = body.match(/Visit (https:\/\/huggingface\.co\/[^\s]+)/);
+      const visitUrl = match ? match[1] : url.split("/resolve/")[0];
+      throw new Error(
+        `Access denied. You need to request access to this model first.\n\n` +
+        `1. Visit: ${visitUrl}\n` +
+        `2. Click "Agree and access repository"\n` +
+        `3. Wait for approval, then try again.`
       );
     }
     throw new Error(`Failed to download model: ${response.status} ${response.statusText}`);
