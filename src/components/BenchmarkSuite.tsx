@@ -96,70 +96,86 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     let cancelled = false;
 
     (async () => {
-      const allRuns: Map<number, BenchmarkResult[]> = new Map();
-      let step = 0;
+      try {
+        const allRuns: Map<number, BenchmarkResult[]> = new Map();
+        let step = 0;
 
-      for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
-        allRuns.set(i, []);
-        for (let run = 0; run < RUNS_PER_PROMPT; run++) {
+        for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
+          allRuns.set(i, []);
+          for (let run = 0; run < RUNS_PER_PROMPT; run++) {
+            if (cancelled) break;
+            setCurrentPromptIdx(i);
+            setCurrentRun(run + 1);
+            setProgress((step / totalSteps) * 100);
+            try {
+              const r = await runBenchmarkPrompt(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category);
+              if (r) allRuns.get(i)!.push(r);
+            } catch (promptErr) {
+              console.warn(`Benchmark prompt ${i} run ${run} failed:`, promptErr);
+            }
+            step++;
+          }
           if (cancelled) break;
-          setCurrentPromptIdx(i);
-          setCurrentRun(run + 1);
-          setProgress((step / totalSteps) * 100);
-          const r = await runBenchmarkPrompt(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category);
-          if (r) allRuns.get(i)!.push(r);
-          step++;
         }
-        if (cancelled) break;
-      }
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      const agg: AggregatedResult[] = [];
-      for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
-        const runs = allRuns.get(i) || [];
-        if (runs.length > 0) {
-          agg.push(buildAggregated(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category, BENCHMARK_PROMPTS[i].label, runs));
+        const agg: AggregatedResult[] = [];
+        for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
+          const runs = allRuns.get(i) || [];
+          if (runs.length > 0) {
+            agg.push(buildAggregated(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category, BENCHMARK_PROMPTS[i].label, runs));
+          }
         }
-      }
 
-      setAggregated(agg);
-      setProgress(100);
-      setCurrentPromptIdx(-1);
-      setCurrentRun(0);
-      setPhase("done");
+        setAggregated(agg);
+        setProgress(100);
+        setCurrentPromptIdx(-1);
+        setCurrentRun(0);
+        setPhase("done");
 
-      const avgTps = agg.length > 0 ? mean(agg.map(a => a.meanTps)) : 0;
-      const avgTtft = agg.length > 0 ? mean(agg.map(a => a.meanTtft)) : 0;
-      const v = getVerdict(avgTps);
+        const avgTps = agg.length > 0 ? mean(agg.map(a => a.meanTps)) : 0;
+        const avgTtft = agg.length > 0 ? mean(agg.map(a => a.meanTtft)) : 0;
+        const v = getVerdict(avgTps);
 
-      toast({ title: `${v.emoji} ${v.label} — ${avgTps.toFixed(1)} tok/s`, description: v.description });
+        toast({ title: `${v.emoji} ${v.label} — ${avgTps.toFixed(1)} tok/s`, description: v.description });
 
-      // Persist — flatten all runs for the results payload
-      const allResults = agg.flatMap(a => a.runs);
-      getDeviceInfo().then((device) => {
-        supabase.from("benchmark_runs").insert({
-          model_name: allResults[0]?.modelName || "Unknown",
-          engine,
-          avg_tps: avgTps,
-          avg_ttft_ms: avgTtft,
-          verdict: v.label,
-          results: allResults.map((r) => ({
-            prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
-            timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
-          })),
-          browser: device.browser, os: device.os, cores: device.cores, ram_gb: device.ram,
-          gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
-          pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
-        }).then(({ error }) => {
+        // Persist — flatten all runs for the results payload
+        const allResults = agg.flatMap(a => a.runs);
+        try {
+          const device = await getDeviceInfo();
+          const { error } = await supabase.from("benchmark_runs").insert({
+            model_name: allResults[0]?.modelName || "Unknown",
+            engine,
+            avg_tps: avgTps,
+            avg_ttft_ms: avgTtft,
+            verdict: v.label,
+            results: allResults.map((r) => ({
+              prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
+              timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
+            })),
+            browser: device.browser, os: device.os, cores: device.cores, ram_gb: device.ram,
+            gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
+            pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
+          });
           if (error) console.error("Failed to save benchmark:", error);
           else onComplete?.();
-        });
-      });
+        } catch (saveErr) {
+          console.error("Failed to persist benchmark:", saveErr);
+        }
+      } catch (err) {
+        console.error("Benchmark suite error:", err);
+        toast({ title: "Benchmark failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+        setPhase("idle");
+        setProgress(0);
+        setCurrentPromptIdx(-1);
+        setCurrentRun(0);
+      }
     })();
 
     return () => { cancelled = true; };
-  }, [phase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, runBenchmarkPrompt, engine, onComplete]);
 
   const handleRun = () => {
     if (!model || noEngine) return;
