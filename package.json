@@ -15,6 +15,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@mediapipe/tasks-genai": "^0.10.26",
+    "@mlc-ai/web-llm": "^0.2.81",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -52,6 +53,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "onnxruntime-web": "^1.24.2",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",

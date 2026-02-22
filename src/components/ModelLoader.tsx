@@ -1,27 +1,47 @@
 import { useState } from "react";
-import { Cpu, Loader2, CheckCircle2, AlertCircle, Key } from "lucide-react";
+import { Cpu, Loader2, CheckCircle2, AlertCircle, Key, Zap, Globe, Server } from "lucide-react";
 import type { ModelStatus } from "@/hooks/useLlmInference";
-import { PRESET_MODELS } from "@/lib/models";
+import type { EngineType, EngineCapability } from "@/lib/inference/types";
+import { PRESET_MODELS, getModelsForEngine } from "@/lib/models";
 
 interface ModelLoaderProps {
   status: ModelStatus;
   statusMessage: string;
   downloadProgress: number;
-  onLoadModel: (url: string, name?: string, hfToken?: string) => void;
+  activeEngine: EngineType | null;
+  capabilities: EngineCapability[];
+  onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
 }
 
-export function ModelLoader({ status, statusMessage, downloadProgress, onLoadModel }: ModelLoaderProps) {
+const ENGINE_ICONS: Record<EngineType, React.ReactNode> = {
+  mediapipe: <Zap className="h-3.5 w-3.5" />,
+  webllm: <Globe className="h-3.5 w-3.5" />,
+  onnx: <Server className="h-3.5 w-3.5" />,
+};
+
+const ENGINE_LABELS: Record<EngineType, string> = {
+  mediapipe: "MediaPipe",
+  webllm: "WebLLM",
+  onnx: "ONNX (WASM)",
+};
+
+export function ModelLoader({ status, statusMessage, downloadProgress, activeEngine, capabilities, onLoadModel }: ModelLoaderProps) {
   const [customUrl, setCustomUrl] = useState("");
   const [hfToken, setHfToken] = useState("");
+  const bestAvailable = capabilities.find((c) => c.available)?.engine || "onnx";
+  const [selectedEngine, setSelectedEngine] = useState<EngineType>(activeEngine || bestAvailable);
   const [selectedPreset, setSelectedPreset] = useState(0);
   const [showToken, setShowToken] = useState(false);
 
+  // Update selected engine when capabilities arrive
+  const engineModels = getModelsForEngine(selectedEngine);
+
   const handleLoad = () => {
     if (customUrl.trim()) {
-      onLoadModel(customUrl.trim(), "Custom Model", hfToken.trim() || undefined);
-    } else {
-      const model = PRESET_MODELS[selectedPreset];
-      onLoadModel(model.url, model.name, hfToken.trim() || undefined);
+      onLoadModel(customUrl.trim(), "Custom Model", hfToken.trim() || undefined, selectedEngine);
+    } else if (engineModels.length > 0) {
+      const model = engineModels[selectedPreset] || engineModels[0];
+      onLoadModel(model.url, model.name, hfToken.trim() || undefined, model.engine);
     }
   };
 
@@ -50,85 +70,138 @@ export function ModelLoader({ status, statusMessage, downloadProgress, onLoadMod
       </div>
 
       <div className="space-y-4 rounded-xl border border-border bg-card p-6">
+        {/* Engine selector */}
         <div className="space-y-2">
           <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Select a model
+            Inference Engine
           </label>
-          <div className="space-y-2">
-            {PRESET_MODELS.map((model, i) => (
+          <div className="grid grid-cols-3 gap-2">
+            {capabilities.map((cap) => (
               <button
-                key={model.id}
-                onClick={() => setSelectedPreset(i)}
-                disabled={status === "loading"}
-                className={`w-full rounded-lg border px-4 py-3 text-left transition-all ${
-                  selectedPreset === i
+                key={cap.engine}
+                onClick={() => {
+                  setSelectedEngine(cap.engine);
+                  setSelectedPreset(0);
+                }}
+                disabled={!cap.available || status === "loading"}
+                className={`relative flex flex-col items-center gap-1.5 rounded-lg border px-3 py-3 text-center transition-all ${
+                  selectedEngine === cap.engine
                     ? "border-primary/50 bg-primary/10"
-                    : "border-border bg-secondary/50 hover:border-muted-foreground/30"
+                    : cap.available
+                    ? "border-border bg-secondary/50 hover:border-muted-foreground/30"
+                    : "border-border/50 bg-secondary/20 opacity-50 cursor-not-allowed"
                 }`}
               >
-                <div className="flex items-baseline justify-between">
-                  <span className={`font-mono text-sm ${selectedPreset === i ? "text-foreground" : "text-muted-foreground"}`}>
-                    {model.name}
-                  </span>
-                  <span className="text-xs text-muted-foreground/60 font-mono">{model.size}</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground/70">{model.description}</p>
-                {model.gated && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-accent font-mono">
-                    <Key className="h-2.5 w-2.5" /> Requires HuggingFace token
-                  </span>
+                <span className={selectedEngine === cap.engine ? "text-primary" : "text-muted-foreground"}>
+                  {ENGINE_ICONS[cap.engine]}
+                </span>
+                <span className={`text-xs font-mono font-medium ${selectedEngine === cap.engine ? "text-foreground" : "text-muted-foreground"}`}>
+                  {ENGINE_LABELS[cap.engine]}
+                </span>
+                {!cap.available && (
+                  <span className="text-[9px] text-destructive font-mono">Unavailable</span>
+                )}
+                {cap.available && cap.engine === "onnx" && (
+                  <span className="text-[9px] text-accent font-mono">iOS ✓</span>
                 )}
               </button>
             ))}
           </div>
+          {selectedEngine === "onnx" && (
+            <p className="text-[10px] text-accent font-mono">
+              ⚠ WASM inference is slower than WebGPU. Best for compatibility testing on iOS/Safari.
+            </p>
+          )}
         </div>
 
-        {/* HuggingFace Token */}
+        {/* Model selector */}
         <div className="space-y-2">
-          <button
-            onClick={() => setShowToken(!showToken)}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Key className="h-3 w-3" />
-            {showToken ? "Hide" : "Add"} HuggingFace Token
-            {hfToken && <CheckCircle2 className="h-3 w-3 text-primary" />}
-          </button>
-          {showToken && (
-            <div className="space-y-1.5">
-              <input
-                type="password"
-                value={hfToken}
-                onChange={(e) => setHfToken(e.target.value)}
-                placeholder="hf_..."
-                disabled={status === "loading"}
-                className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
-              />
-              <p className="text-[10px] text-muted-foreground/50">
-                Required for gated models. Get one at{" "}
-                <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-primary/70 hover:text-primary underline">
-                  huggingface.co/settings/tokens
-                </a>
-                . Token stays in your browser only.
-              </p>
+          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Select a model
+          </label>
+          {engineModels.length === 0 ? (
+            <p className="text-xs text-muted-foreground/70 font-mono py-2">
+              No preset models for this engine. Paste a custom URL below.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {engineModels.map((model, i) => (
+                <button
+                  key={model.id}
+                  onClick={() => setSelectedPreset(i)}
+                  disabled={status === "loading"}
+                  className={`w-full rounded-lg border px-4 py-3 text-left transition-all ${
+                    selectedPreset === i
+                      ? "border-primary/50 bg-primary/10"
+                      : "border-border bg-secondary/50 hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between">
+                    <span className={`font-mono text-sm ${selectedPreset === i ? "text-foreground" : "text-muted-foreground"}`}>
+                      {model.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground/60 font-mono">{model.size}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground/70">{model.description}</p>
+                  {model.gated && (
+                    <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-accent font-mono">
+                      <Key className="h-2.5 w-2.5" /> Requires HuggingFace token
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           )}
         </div>
 
+        {/* HuggingFace Token */}
+        {selectedEngine === "mediapipe" && (
+          <div className="space-y-2">
+            <button
+              onClick={() => setShowToken(!showToken)}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Key className="h-3 w-3" />
+              {showToken ? "Hide" : "Add"} HuggingFace Token
+              {hfToken && <CheckCircle2 className="h-3 w-3 text-primary" />}
+            </button>
+            {showToken && (
+              <div className="space-y-1.5">
+                <input
+                  type="password"
+                  value={hfToken}
+                  onChange={(e) => setHfToken(e.target.value)}
+                  placeholder="hf_..."
+                  disabled={status === "loading"}
+                  className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                />
+                <p className="text-[10px] text-muted-foreground/50">
+                  Required for gated models. Get one at{" "}
+                  <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-primary/70 hover:text-primary underline">
+                    huggingface.co/settings/tokens
+                  </a>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Custom URL */}
         <div className="space-y-2">
           <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Or paste a custom model URL
+            Or paste a custom {selectedEngine === "webllm" ? "model ID" : "model URL"}
           </label>
           <input
             type="text"
             value={customUrl}
             onChange={(e) => setCustomUrl(e.target.value)}
-            placeholder="https://huggingface.co/..."
+            placeholder={selectedEngine === "webllm" ? "e.g. Llama-3.2-1B-Instruct-q4f16_1-MLC" : "https://huggingface.co/..."}
             disabled={status === "loading"}
             className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
           />
         </div>
 
-        {/* Download progress bar */}
+        {/* Progress */}
         {status === "loading" && downloadProgress > 0 && (
           <div className="space-y-1">
             <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
@@ -142,7 +215,7 @@ export function ModelLoader({ status, statusMessage, downloadProgress, onLoadMod
 
         <button
           onClick={handleLoad}
-          disabled={status === "loading"}
+          disabled={status === "loading" || (engineModels.length === 0 && !customUrl.trim())}
           className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50 glow-primary"
         >
           {status === "loading" ? (
@@ -151,7 +224,7 @@ export function ModelLoader({ status, statusMessage, downloadProgress, onLoadMod
               <span className="font-mono text-xs">{statusMessage}</span>
             </span>
           ) : (
-            "Load Model"
+            `Load with ${ENGINE_LABELS[selectedEngine]}`
           )}
         </button>
 
@@ -164,7 +237,9 @@ export function ModelLoader({ status, statusMessage, downloadProgress, onLoadMod
       </div>
 
       <p className="text-center text-xs text-muted-foreground/60">
-        Requires a WebGPU-compatible browser (Chrome 113+). Models run 100% locally.
+        {selectedEngine === "onnx"
+          ? "ONNX WASM works on all browsers including iOS Safari. Models run 100% locally."
+          : "Requires a WebGPU-compatible browser (Chrome 113+). Models run 100% locally."}
       </p>
     </div>
   );
