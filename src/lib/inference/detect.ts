@@ -35,7 +35,7 @@ export async function detectCapabilities(): Promise<EngineCapability[]> {
   // 3. ONNX Runtime Web works everywhere via WASM
   caps.push({
     engine: "onnx",
-    label: "ONNX Runtime (WASM)",
+    label: "Transformers.js (WASM)",
     available: true, // WASM is universally supported
     reason: undefined,
     priority: 3,

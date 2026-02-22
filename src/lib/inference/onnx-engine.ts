@@ -1,155 +1,121 @@
-import * as ort from "onnxruntime-web";
+import { pipeline, TextStreamer, env } from "@huggingface/transformers";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
 
 /**
- * ONNX Runtime Web engine — WASM-based fallback for browsers without WebGPU.
- * 
- * This engine uses ONNX Runtime Web with the WASM execution provider,
- * which works on ALL browsers including iOS Safari.
- * 
- * Note: LLM inference on CPU/WASM is significantly slower than WebGPU.
- * This is a compatibility fallback, not a performance option.
- * 
- * Compatible with ONNX-exported transformer models (e.g. from Optimum).
+ * Transformers.js engine — WASM-based fallback for browsers without WebGPU.
+ *
+ * Uses @huggingface/transformers with ONNX models (e.g. onnx-community/Qwen3-0.6B-ONNX).
+ * Works on ALL browsers including iOS Safari via WASM backend.
  */
 export class OnnxEngine implements InferenceEngine {
   readonly type = "onnx" as const;
-  readonly label = "ONNX Runtime (WASM)";
-  private session: ort.InferenceSession | null = null;
-  private tokenizer: SimpleTokenizer | null = null;
+  readonly label = "Transformers.js (WASM)";
+  private generator: any = null;
 
   async load(
-    modelUrl: string,
+    modelId: string,
     onProgress: (pct: number, msg: string) => void
   ): Promise<void> {
-    onProgress(0, "Configuring ONNX Runtime (WASM)...");
+    onProgress(0, "Configuring Transformers.js...");
 
-    // Force WASM backend for maximum compatibility
-    ort.env.wasm.numThreads = Math.min(navigator.hardwareConcurrency || 2, 4);
+    // Disable local model caching to avoid issues in some browsers
+    env.allowLocalModels = false;
 
-    onProgress(10, "Downloading ONNX model...");
+    onProgress(5, "Downloading model files...");
 
-    const response = await fetch(modelUrl);
-    if (!response.ok) throw new Error(`Failed to download model: ${response.status}`);
-
-    const total = parseInt(response.headers.get("content-length") || "0", 10);
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error("ReadableStream not supported");
-
-    const chunks: Uint8Array[] = [];
-    let downloaded = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      downloaded += value.length;
-      if (total > 0) {
-        const pct = Math.round((downloaded / total) * 100);
-        const mb = (downloaded / (1024 * 1024)).toFixed(1);
-        const totalMb = (total / (1024 * 1024)).toFixed(1);
-        onProgress(pct, `Downloading: ${mb} / ${totalMb} MB (${pct}%)`);
-      }
-    }
-
-    const buffer = new Uint8Array(downloaded);
-    let offset = 0;
-    for (const chunk of chunks) {
-      buffer.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    onProgress(90, "Initializing ONNX session...");
-    this.session = await ort.InferenceSession.create(buffer.buffer, {
-      executionProviders: ["wasm"],
+    this.generator = await pipeline("text-generation", modelId, {
+      dtype: "q4",
+      device: "wasm",
+      progress_callback: (progress: any) => {
+        if (progress.status === "download" || progress.status === "progress") {
+          const pct = Math.round((progress.progress || 0));
+          const file = progress.file || "";
+          onProgress(Math.min(5 + pct * 0.9, 95), `Downloading ${file}: ${pct}%`);
+        } else if (progress.status === "done") {
+          onProgress(95, "Initializing model...");
+        } else if (progress.status === "ready") {
+          onProgress(100, "Model ready");
+        }
+      },
     });
 
-    // Initialize a basic tokenizer (word-level splitting as fallback)
-    this.tokenizer = new SimpleTokenizer();
-
-    onProgress(100, "ONNX model ready");
+    onProgress(100, "Model ready");
   }
 
   unload(): void {
-    this.session?.release();
-    this.session = null;
-    this.tokenizer = null;
+    if (this.generator) {
+      this.generator.dispose?.();
+      this.generator = null;
+    }
   }
 
   async generateStream(prompt: string, callbacks: InferenceCallbacks): Promise<void> {
-    // ONNX models typically do single-pass inference, not streaming
-    // We simulate streaming by yielding the full response
-    const result = await this.generateFull(prompt);
-    callbacks.onToken(result.response);
+    if (!this.generator) throw new Error("Model not loaded");
+
+    const streamer = new TextStreamer(this.generator.tokenizer, {
+      skip_prompt: true,
+      skip_special_tokens: true,
+      callback_function: (text: string) => {
+        callbacks.onToken(text);
+      },
+    });
+
+    await this.generator(prompt, {
+      max_new_tokens: 512,
+      temperature: 0.7,
+      do_sample: true,
+      streamer,
+    });
+
     callbacks.onComplete();
   }
 
   async generateFull(prompt: string): Promise<GenerationResult> {
-    if (!this.session || !this.tokenizer) throw new Error("Model not loaded");
+    if (!this.generator) throw new Error("Model not loaded");
 
     const start = performance.now();
+    let firstTokenTime: number | null = null;
+    let tokenCount = 0;
 
-    // Tokenize input
-    const inputIds = this.tokenizer.encode(prompt);
-    const inputTensor = new ort.Tensor("int64", BigInt64Array.from(inputIds.map(BigInt)), [1, inputIds.length]);
-    const attentionMask = new ort.Tensor("int64", BigInt64Array.from(inputIds.map(() => 1n)), [1, inputIds.length]);
+    const streamer = new TextStreamer(this.generator.tokenizer, {
+      skip_prompt: true,
+      skip_special_tokens: true,
+      callback_function: () => {
+        if (firstTokenTime === null) firstTokenTime = performance.now();
+        tokenCount++;
+      },
+    });
 
-    const feeds: Record<string, ort.Tensor> = {
-      input_ids: inputTensor,
-      attention_mask: attentionMask,
-    };
-
-    const firstTokenTime = performance.now();
-    const results = await this.session.run(feeds);
+    const output = await this.generator(prompt, {
+      max_new_tokens: 512,
+      temperature: 0.7,
+      do_sample: true,
+      streamer,
+    });
 
     const end = performance.now();
-
-    // Extract output — format depends on model architecture
-    const outputKey = Object.keys(results)[0];
-    const outputData = results[outputKey];
-    
-    // Attempt to decode logits into text
-    let response = "";
-    let tokenCount = 1;
-
-    if (outputData) {
-      const data = outputData.data as Float32Array;
-      // For causal LM: take argmax of last token's logits
-      const vocabSize = outputData.dims[outputData.dims.length - 1];
-      const lastTokenLogits = data.slice(-vocabSize);
-      const maxIdx = lastTokenLogits.indexOf(Math.max(...lastTokenLogits));
-      response = this.tokenizer.decode([maxIdx]);
-      tokenCount = 1;
-    }
-
     const timeMs = end - start;
-    const ttftMs = firstTokenTime - start;
+    const ttftMs = firstTokenTime ? firstTokenTime - start : timeMs;
+
+    // Extract generated text (remove the prompt)
+    const fullText = output?.[0]?.generated_text || "";
+    const response = typeof fullText === "string"
+      ? fullText.slice(prompt.length).trim()
+      : String(fullText);
 
     return {
       response,
-      tokenCount,
+      tokenCount: Math.max(tokenCount, 1),
       timeMs,
       ttftMs,
-      tpotMs: 0,
+      tpotMs: tokenCount > 1 ? (timeMs - ttftMs) / (tokenCount - 1) : 0,
     };
   }
 
   formatPrompt(messages: Array<{ role: "user" | "assistant"; content: string }>): string {
-    return messages.map((m) => `${m.role}: ${m.content}`).join("\n") + "\nassistant:";
-  }
-}
-
-/**
- * Minimal tokenizer fallback. For production use, load the model's
- * actual tokenizer.json alongside the ONNX model.
- */
-class SimpleTokenizer {
-  encode(text: string): number[] {
-    // Very basic word-level encoding — real usage needs a proper tokenizer
-    return text.split(/\s+/).map((_, i) => i + 1);
-  }
-
-  decode(ids: number[]): string {
-    return `[token:${ids.join(",")}]`;
+    // Use ChatML format for Qwen3
+    return messages
+      .map((m) => `<|im_start|>${m.role}\n${m.content}<|im_end|>`)
+      .join("\n") + "\n<|im_start|>assistant\n";
   }
 }
