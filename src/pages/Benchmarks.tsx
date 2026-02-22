@@ -2,12 +2,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Cpu, ArrowLeft, Zap, Timer, Gauge, Monitor, HardDrive,
-  ChevronDown, ChevronRight, FlaskConical,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkCategory } from "@/lib/models";
-import { useLlmInference } from "@/hooks/useLlmInference";
-import { QuickStart } from "@/components/QuickStart";
+import { BenchmarkSuite } from "@/components/BenchmarkSuite";
 
 interface PerPromptResult {
   prompt: string;
@@ -38,10 +36,14 @@ interface BenchmarkRun {
 }
 
 const VERDICT_STYLE: Record<string, { color: string; emoji: string }> = {
-  Great: { color: "text-primary", emoji: "🚀" },
-  Passable: { color: "text-yellow-400", emoji: "👍" },
-  Slow: { color: "text-orange-400", emoji: "🐢" },
+  "Great": { color: "text-primary", emoji: "🚀" },
+  "Passable": { color: "text-yellow-400", emoji: "👍" },
+  "Mostly, yes": { color: "text-yellow-400", emoji: "👍" },
+  "Slow": { color: "text-orange-400", emoji: "🐢" },
+  "Barely…": { color: "text-orange-400", emoji: "🐢" },
   "Not viable": { color: "text-destructive", emoji: "⛔" },
+  "No, not yet": { color: "text-destructive", emoji: "⛔" },
+  "Yes, you can AI!": { color: "text-primary", emoji: "🚀" },
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -77,7 +79,6 @@ function RunCard({ run }: { run: BenchmarkRun }) {
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
-      {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-3 p-4 text-left hover:bg-secondary/20 transition-colors"
@@ -117,10 +118,8 @@ function RunCard({ run }: { run: BenchmarkRun }) {
         </div>
       </button>
 
-      {/* Expanded details */}
       {expanded && (
         <div className="border-t border-border p-4 space-y-4">
-          {/* Per-prompt results as metric bars */}
           {results.length > 0 && (
             <div className="space-y-3">
               <h4 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">Per-test Results</h4>
@@ -139,7 +138,6 @@ function RunCard({ run }: { run: BenchmarkRun }) {
             </div>
           )}
 
-          {/* Detailed metrics grid */}
           {results.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">Detailed Metrics</h4>
@@ -175,7 +173,6 @@ function RunCard({ run }: { run: BenchmarkRun }) {
             </div>
           )}
 
-          {/* Device info */}
           <div className="space-y-1.5">
             <h4 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">Device</h4>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-muted-foreground">
@@ -197,11 +194,6 @@ export default function Benchmarks() {
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const {
-    status, statusMessage, downloadProgress, activeEngine, capabilities,
-    loadModel, unloadModel, runBenchmarkPrompt,
-  } = useLlmInference();
-
   const fetchRuns = () => {
     supabase
       .from("benchmark_runs")
@@ -217,14 +209,6 @@ export default function Benchmarks() {
   useEffect(() => {
     fetchRuns();
   }, []);
-
-  // Refresh runs when a benchmark finishes
-  useEffect(() => {
-    if (status === "ready") {
-      const timer = setTimeout(fetchRuns, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [status]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -247,7 +231,6 @@ export default function Benchmarks() {
 
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-4xl space-y-8">
-          {/* Title */}
           <div>
             <h1 className="text-2xl font-bold font-mono text-foreground">Benchmarks</h1>
             <p className="text-sm text-muted-foreground mt-1">
@@ -255,71 +238,10 @@ export default function Benchmarks() {
             </p>
           </div>
 
-          {/* QuickStart Runner */}
-          <section className="rounded-lg border border-border bg-card overflow-hidden">
-            <div className="border-b border-border px-4 py-2.5 flex items-center gap-2">
-              <Zap className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-bold font-mono text-foreground">Run QuickBench</h2>
-              <span className="text-[10px] text-muted-foreground font-mono">Full {BENCHMARK_PROMPTS.length}-prompt stress test</span>
-            </div>
-            <div className="min-h-[320px]">
-              <QuickStart
-                status={status}
-                statusMessage={statusMessage}
-                downloadProgress={downloadProgress}
-                activeEngine={activeEngine}
-                capabilities={capabilities}
-                onLoadModel={loadModel}
-                onAdvancedMode={() => {
-                  // Refresh runs after benchmark completes
-                  fetchRuns();
-                }}
-                onRunBenchmark={runBenchmarkPrompt}
-              />
-            </div>
-          </section>
+          {/* Runnable Test Suite */}
+          <BenchmarkSuite onComplete={fetchRuns} />
 
-          {/* Benchmark Prompts Catalog */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <FlaskConical className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-bold font-mono text-foreground">Test Suite</h2>
-              <span className="rounded border border-border bg-secondary/30 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                {BENCHMARK_PROMPTS.length} prompts
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(Object.entries(BENCHMARK_CATEGORIES) as [BenchmarkCategory, { label: string; description: string }][]).map(
-                ([cat, meta]) => {
-                  const prompts = BENCHMARK_PROMPTS.filter((p) => p.category === cat);
-                  return (
-                    <div key={cat} className="rounded-lg border border-border bg-card p-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-block w-2 h-2 rounded-full ${CATEGORY_COLORS[cat]}`} />
-                        <span className="text-xs font-bold font-mono text-foreground">{meta.label}</span>
-                        <span className="text-[10px] text-muted-foreground font-mono">({prompts.length})</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{meta.description}</p>
-                      <div className="space-y-1">
-                        {prompts.map((p, i) => (
-                          <div key={i} className="flex items-start gap-1.5 text-[11px] font-mono">
-                            <span className="text-muted-foreground/50 mt-0.5">›</span>
-                            <div>
-                              <span className="text-foreground font-medium">{p.label}</span>
-                              <span className="text-muted-foreground ml-1.5">— {p.description}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                }
-              )}
-            </div>
-          </section>
-
-          {/* Runs */}
+          {/* Historical Runs */}
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <Gauge className="h-4 w-4 text-primary" />
@@ -338,9 +260,7 @@ export default function Benchmarks() {
             ) : runs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-lg border border-dashed border-border">
                 <p className="text-sm text-muted-foreground font-mono">No benchmark runs yet.</p>
-                <Link to="/" className="text-xs text-primary hover:underline font-mono">
-                  Run your first benchmark →
-                </Link>
+                <p className="text-xs text-muted-foreground font-mono">Run the test suite above to get started.</p>
               </div>
             ) : (
               <div className="space-y-3">
