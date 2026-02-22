@@ -63,13 +63,8 @@ const ENGINE_LABEL: Record<EngineType, string> = {
   onnx: "ONNX · WASM",
 };
 
-// Subset of benchmark prompts for the quick test (one per category)
-const QUICK_PROMPTS = [
-  BENCHMARK_PROMPTS[0],  // ttft - single word
-  BENCHMARK_PROMPTS[3],  // short - haiku
-  BENCHMARK_PROMPTS[4],  // medium - explain concept
-  BENCHMARK_PROMPTS[8],  // reasoning - math
-];
+// Run all benchmark prompts for a comprehensive stress test
+const QUICK_PROMPTS = BENCHMARK_PROMPTS;
 
 export function QuickStart({
   status,
