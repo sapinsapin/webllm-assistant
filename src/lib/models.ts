@@ -84,11 +84,11 @@ export function getSmallestModel(engine: EngineType): ModelPreset | null {
   return models.find((m) => !m.gated) || models[0] || null;
 }
 
-/** Returns the best engine+model combo for quick start (non-gated only). */
+/** Returns the best engine+model combo for quick start (prefers smallest model across engines). */
 export function getBestQuickStartModel(capabilities: { engine: EngineType; available: boolean; priority: number }[]): ModelPreset | null {
   const sorted = [...capabilities].filter(c => c.available).sort((a, b) => a.priority - b.priority);
   for (const cap of sorted) {
-    const model = getModelsForEngine(cap.engine).find(m => !m.gated);
+    const model = getModelsForEngine(cap.engine)[0];
     if (model) return model;
   }
   return null;

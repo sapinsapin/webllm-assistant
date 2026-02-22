@@ -1,6 +1,8 @@
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
 
+const HF_FALLBACK_TOKEN = "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";
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -12,8 +14,9 @@ async function downloadWithProgress(
   hfToken: string | null,
   onProgress: (pct: number, msg: string) => void
 ): Promise<Uint8Array> {
+  const token = hfToken || HF_FALLBACK_TOKEN;
   const headers: Record<string, string> = {};
-  if (hfToken) headers["Authorization"] = `Bearer ${hfToken}`;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const response = await fetch(url, { headers });
 
