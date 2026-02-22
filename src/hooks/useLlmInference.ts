@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
+import { cacheModelBuffer, getCachedModelBuffer } from "@/lib/modelCache";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "error";
 
@@ -114,24 +115,39 @@ export function useLlmInference() {
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
       );
 
-      setStatusMessage("Downloading model...");
+      setStatusMessage("Checking local model cache...");
 
-      // Fallback HF token for gated models when user doesn't provide one
-      const FALLBACK_HF_TOKEN = "hf_REPLACE_WITH_YOUR_TOKEN";
-      const effectiveToken = hfToken || FALLBACK_HF_TOKEN;
+      let modelBuffer = await getCachedModelBuffer(modelUrl);
 
-      const modelBuffer = await downloadModelWithProgress(
-        modelUrl,
-        effectiveToken,
-        (pct, downloaded, total) => {
-          setDownloadProgress(Math.max(pct, 0));
-          if (total > 0) {
-            setStatusMessage(`Downloading model: ${formatBytes(downloaded)} / ${formatBytes(total)} (${pct}%)`);
-          } else {
-            setStatusMessage(`Downloading model: ${formatBytes(downloaded)}`);
+      if (!modelBuffer) {
+        setStatusMessage("Downloading model...");
+
+        // Fallback HF token for gated models when user doesn't provide one
+        const FALLBACK_HF_TOKEN = "hf_REPLACE_WITH_YOUR_TOKEN";
+        const effectiveToken = hfToken || FALLBACK_HF_TOKEN;
+
+        modelBuffer = await downloadModelWithProgress(
+          modelUrl,
+          effectiveToken,
+          (pct, downloaded, total) => {
+            setDownloadProgress(Math.max(pct, 0));
+            if (total > 0) {
+              setStatusMessage(`Downloading model: ${formatBytes(downloaded)} / ${formatBytes(total)} (${pct}%)`);
+            } else {
+              setStatusMessage(`Downloading model: ${formatBytes(downloaded)}`);
+            }
           }
+        );
+
+        setStatusMessage("Saving model to local cache...");
+        try {
+          await cacheModelBuffer(modelUrl, modelBuffer);
+        } catch (cacheErr) {
+          console.warn("Unable to cache model locally:", cacheErr);
         }
-      );
+      } else {
+        setStatusMessage("Loaded model from local cache");
+      }
 
       setStatusMessage("Initializing model (may take a minute)...");
       setDownloadProgress(100);
