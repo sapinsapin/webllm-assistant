@@ -1,7 +1,16 @@
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
+import { supabase } from "@/integrations/supabase/client";
 
-const HF_FALLBACK_TOKEN = "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";
+async function fetchHfToken(): Promise<string> {
+  try {
+    const { data, error } = await supabase.functions.invoke("get-hf-token");
+    if (error) throw error;
+    return data?.token || "";
+  } catch {
+    return "";
+  }
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -14,7 +23,7 @@ async function downloadWithProgress(
   hfToken: string | null,
   onProgress: (pct: number, msg: string) => void
 ): Promise<Uint8Array> {
-  const token = hfToken || HF_FALLBACK_TOKEN;
+  const token = hfToken || await fetchHfToken();
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
 

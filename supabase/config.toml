@@ -1,1 +1,4 @@
 project_id = "gjovfujbfqwouopnupwb"
+
+[functions.get-hf-token]
+verify_jwt = false
