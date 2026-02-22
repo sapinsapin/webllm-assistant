@@ -1,7 +1,7 @@
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
 
-const HF_FALLBACK_TOKEN = "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";
+const HF_FALLBACK_TOKEN = "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";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
