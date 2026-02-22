@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AlertCircle, Settings2, Loader2, Zap, Timer, Gauge, Download } from "lucide-react";
 import type { ModelStatus, BenchmarkResult } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
-import { getSmallestModel } from "@/lib/models";
+import { getBestQuickStartModel } from "@/lib/models";
 import { BENCHMARK_PROMPTS } from "@/lib/models";
 
 type Phase = "idle" | "downloading" | "benchmarking" | "done";
@@ -76,9 +76,8 @@ export function QuickStart({
   onAdvancedMode,
   onRunBenchmark,
 }: QuickStartProps) {
-  const bestEngine = capabilities.find((c) => c.available)?.engine || "onnx";
-  const engine = activeEngine || bestEngine;
-  const model = getSmallestModel(engine);
+  const model = getBestQuickStartModel(capabilities);
+  const engine = model?.engine || activeEngine || "onnx";
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [benchResults, setBenchResults] = useState<BenchmarkResult[]>([]);
