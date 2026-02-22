@@ -71,3 +71,9 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Model checkpoint caching
+
+This app registers a service worker (`/model-cache-sw.js`) that caches downloaded model assets (for example `*.bin`, `*.wasm`, `*.json`, `*.litertlm`, `*.task`, etc.) from common model hosts such as Hugging Face and MLC. Once downloaded, these files are reused on subsequent visits so models can load faster and avoid redownloading.
+
+> Note: browser storage/cache partitioning policies are controlled by the browser. Reuse across unrelated sites may vary by browser/version, even when the exact same model URLs are requested.
