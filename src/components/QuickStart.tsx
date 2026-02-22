@@ -352,14 +352,31 @@ export function QuickStart({
           </>
         )}
         {phase === "downloading" && (
-          <p className="text-xs font-mono text-muted-foreground animate-pulse">
-            Downloading {model?.name} ({model?.size})...
-          </p>
+          <div className="space-y-2 w-full max-w-xs">
+            <p className="text-xs font-mono text-muted-foreground animate-pulse">
+              Downloading {model?.name} ({model?.size})...
+            </p>
+            <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${Math.max(downloadProgress, 2)}%` }}
+              />
+            </div>
+            <p className="text-[10px] font-mono text-muted-foreground/60">{statusMessage}</p>
+          </div>
         )}
         {phase === "benchmarking" && (
-          <p className="text-xs font-mono text-muted-foreground animate-pulse">
-            Running benchmark — {QUICK_PROMPTS.length} quick tests...
-          </p>
+          <div className="space-y-2 w-full max-w-xs">
+            <p className="text-xs font-mono text-muted-foreground animate-pulse">
+              Running benchmark — {QUICK_PROMPTS.length} quick tests...
+            </p>
+            <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${Math.max(benchProgress, 5)}%` }}
+              />
+            </div>
+          </div>
         )}
         {status === "error" && phase === "idle" && (
           <p className="text-xs font-mono text-destructive/80 max-w-xs mx-auto">

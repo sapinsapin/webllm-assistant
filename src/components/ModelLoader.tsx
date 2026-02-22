@@ -11,6 +11,7 @@ interface ModelLoaderProps {
   activeEngine: EngineType | null;
   capabilities: EngineCapability[];
   onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
+  onBackToQuickStart?: () => void;
 }
 
 const ENGINE_ICONS: Record<EngineType, React.ReactNode> = {
@@ -25,7 +26,7 @@ const ENGINE_LABELS: Record<EngineType, string> = {
   onnx: "ONNX (WASM)",
 };
 
-export function ModelLoader({ status, statusMessage, downloadProgress, activeEngine, capabilities, onLoadModel }: ModelLoaderProps) {
+export function ModelLoader({ status, statusMessage, downloadProgress, activeEngine, capabilities, onLoadModel, onBackToQuickStart }: ModelLoaderProps) {
   const [customUrl, setCustomUrl] = useState("");
   const [hfToken, setHfToken] = useState("");
   const bestAvailable = capabilities.find((c) => c.available)?.engine || "onnx";
@@ -61,12 +62,20 @@ export function ModelLoader({ status, statusMessage, downloadProgress, activeEng
           <Cpu className="h-8 w-8 text-primary" />
         </div>
         <h1 className="text-3xl font-bold tracking-tight font-mono">
-          <span className="text-primary glow-text">Edge</span>
-          <span className="text-foreground">LLM</span>
+          <span className="text-primary glow-text">Can I</span>
+          <span className="text-foreground"> AI?</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Run AI models entirely in your browser — no server required
+          Advanced mode — configure engine and model manually
         </p>
+        {onBackToQuickStart && (
+          <button
+            onClick={onBackToQuickStart}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors font-mono mt-1"
+          >
+            ← Back to Quick Test
+          </button>
+        )}
       </div>
 
       <div className="space-y-4 rounded-xl border border-border bg-card p-6">
