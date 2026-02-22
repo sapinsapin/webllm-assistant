@@ -120,6 +120,10 @@ const Index = () => {
               activeEngine={activeEngine}
               capabilities={capabilities}
               onLoadModel={loadModel}
+              onBackToQuickStart={() => {
+                unloadModel();
+                setAdvancedMode(false);
+              }}
             />
           </div>
         ) : activeTab === "chat" ? (
