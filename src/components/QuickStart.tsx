@@ -99,19 +99,24 @@ export function QuickStart({
     let cancelled = false;
 
     (async () => {
-      const results: BenchmarkResult[] = [];
-      for (let i = 0; i < QUICK_PROMPTS.length; i++) {
-        if (cancelled) break;
-        setBenchProgress(((i) / QUICK_PROMPTS.length) * 100);
-        const r = await onRunBenchmark(QUICK_PROMPTS[i].prompt, QUICK_PROMPTS[i].category);
-        if (r) results.push(r);
-      }
-      if (!cancelled) {
+      try {
+        const results: BenchmarkResult[] = [];
+        for (let i = 0; i < QUICK_PROMPTS.length; i++) {
+          if (cancelled) break;
+          setBenchProgress(((i) / QUICK_PROMPTS.length) * 100);
+          try {
+            const r = await onRunBenchmark(QUICK_PROMPTS[i].prompt, QUICK_PROMPTS[i].category);
+            if (r) results.push(r);
+          } catch (promptErr) {
+            console.warn(`QuickStart prompt ${i} failed:`, promptErr);
+          }
+        }
+        if (cancelled) return;
+
         setBenchResults(results);
         setBenchProgress(100);
         setPhase("done");
 
-        // Compute verdict for toast + DB
         const tps = results.length > 0
           ? results.reduce((a, r) => a + r.tokensPerSecond, 0) / results.length
           : 0;
@@ -120,7 +125,6 @@ export function QuickStart({
           : 0;
         const v = getVerdict(tps);
 
-        // Show toast
         toast({
           title: `${v.emoji} ${v.label} — ${tps.toFixed(1)} tok/s`,
           description: v.description,
@@ -131,36 +135,33 @@ export function QuickStart({
           ),
         });
 
-        // Save to DB
-        getDeviceInfo().then((device) => {
-          supabase.from("benchmark_runs").insert({
+        try {
+          const device = await getDeviceInfo();
+          await supabase.from("benchmark_runs").insert({
             model_name: results[0]?.modelName || "Unknown",
             engine: engine,
             avg_tps: tps,
             avg_ttft_ms: ttft,
             verdict: v.label,
             results: results.map(r => ({
-              prompt: r.prompt,
-              category: r.category,
-              tokensGenerated: r.tokensGenerated,
-              timeMs: r.timeMs,
-              tokensPerSecond: r.tokensPerSecond,
-              ttftMs: r.ttftMs,
-              tpotMs: r.tpotMs,
+              prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
+              timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
             })),
-            browser: device.browser,
-            os: device.os,
-            cores: device.cores,
-            ram_gb: device.ram,
-            gpu: device.gpu,
-            gpu_vendor: device.gpuVendor,
-            screen_res: device.screenRes,
-            pixel_ratio: device.pixelRatio,
-            user_agent: device.userAgent,
-          }).then(({ error }) => {
-            if (error) console.error("Failed to save benchmark:", error);
+            browser: device.browser, os: device.os, cores: device.cores, ram_gb: device.ram,
+            gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
+            pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
           });
-        });
+        } catch (saveErr) {
+          console.error("Failed to save benchmark:", saveErr);
+        }
+      } catch (err) {
+        console.error("QuickStart benchmark error:", err);
+        if (!cancelled) {
+          toast({ title: "Benchmark failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+          setPhase("idle");
+          setBenchProgress(0);
+          setBenchResults([]);
+        }
       }
     })();
 
