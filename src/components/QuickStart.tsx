@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertCircle, Settings2, Loader2, Zap, Timer, Gauge, Download } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { supabase } from "@/integrations/supabase/client";
+import { getDeviceInfo } from "@/lib/deviceInfo";
 import type { ModelStatus, BenchmarkResult } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { getBestQuickStartModel } from "@/lib/models";
@@ -76,6 +81,7 @@ export function QuickStart({
   onAdvancedMode,
   onRunBenchmark,
 }: QuickStartProps) {
+  const navigate = useNavigate();
   const model = getBestQuickStartModel(capabilities);
   const engine = model?.engine || activeEngine || "onnx";
 
@@ -109,6 +115,57 @@ export function QuickStart({
         setBenchResults(results);
         setBenchProgress(100);
         setPhase("done");
+
+        // Compute verdict for toast + DB
+        const tps = results.length > 0
+          ? results.reduce((a, r) => a + r.tokensPerSecond, 0) / results.length
+          : 0;
+        const ttft = results.length > 0
+          ? results.reduce((a, r) => a + r.ttftMs, 0) / results.length
+          : 0;
+        const v = getVerdict(tps);
+
+        // Show toast
+        toast({
+          title: `${v.emoji} ${v.label} — ${tps.toFixed(1)} tok/s`,
+          description: v.description,
+          action: (
+            <ToastAction altText="View all benchmarks" onClick={() => navigate("/benchmarks")}>
+              View All
+            </ToastAction>
+          ),
+        });
+
+        // Save to DB
+        getDeviceInfo().then((device) => {
+          supabase.from("benchmark_runs").insert({
+            model_name: results[0]?.modelName || "Unknown",
+            engine: engine,
+            avg_tps: tps,
+            avg_ttft_ms: ttft,
+            verdict: v.label,
+            results: results.map(r => ({
+              prompt: r.prompt,
+              category: r.category,
+              tokensGenerated: r.tokensGenerated,
+              timeMs: r.timeMs,
+              tokensPerSecond: r.tokensPerSecond,
+              ttftMs: r.ttftMs,
+              tpotMs: r.tpotMs,
+            })),
+            browser: device.browser,
+            os: device.os,
+            cores: device.cores,
+            ram_gb: device.ram,
+            gpu: device.gpu,
+            gpu_vendor: device.gpuVendor,
+            screen_res: device.screenRes,
+            pixel_ratio: device.pixelRatio,
+            user_agent: device.userAgent,
+          }).then(({ error }) => {
+            if (error) console.error("Failed to save benchmark:", error);
+          });
+        });
       }
     })();
 
@@ -189,20 +246,27 @@ export function QuickStart({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRetry}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary/50 px-4 py-2 text-xs font-mono text-secondary-foreground transition-all hover:bg-secondary"
-          >
-            Run Again
-          </button>
+        <div className="flex flex-col items-center gap-3">
           <button
             onClick={onAdvancedMode}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-xs font-mono text-primary-foreground font-semibold transition-all hover:bg-primary/90"
           >
-            <Settings2 className="h-3 w-3" />
-            Advanced
+            💬 Chat with the AI
           </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRetry}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary/50 px-4 py-2 text-xs font-mono text-secondary-foreground transition-all hover:bg-secondary"
+            >
+              Run Again
+            </button>
+            <button
+              onClick={() => navigate("/benchmarks")}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            >
+              📊 All Benchmarks
+            </button>
+          </div>
         </div>
       </div>
     );

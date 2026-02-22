@@ -14,7 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      benchmark_runs: {
+        Row: {
+          avg_tps: number
+          avg_ttft_ms: number
+          browser: string | null
+          cores: number | null
+          created_at: string
+          engine: string
+          gpu: string | null
+          gpu_vendor: string | null
+          id: string
+          model_name: string
+          os: string | null
+          pixel_ratio: number | null
+          ram_gb: number | null
+          results: Json
+          screen_res: string | null
+          user_agent: string | null
+          verdict: string
+        }
+        Insert: {
+          avg_tps: number
+          avg_ttft_ms: number
+          browser?: string | null
+          cores?: number | null
+          created_at?: string
+          engine: string
+          gpu?: string | null
+          gpu_vendor?: string | null
+          id?: string
+          model_name: string
+          os?: string | null
+          pixel_ratio?: number | null
+          ram_gb?: number | null
+          results?: Json
+          screen_res?: string | null
+          user_agent?: string | null
+          verdict: string
+        }
+        Update: {
+          avg_tps?: number
+          avg_ttft_ms?: number
+          browser?: string | null
+          cores?: number | null
+          created_at?: string
+          engine?: string
+          gpu?: string | null
+          gpu_vendor?: string | null
+          id?: string
+          model_name?: string
+          os?: string | null
+          pixel_ratio?: number | null
+          ram_gb?: number | null
+          results?: Json
+          screen_res?: string | null
+          user_agent?: string | null
+          verdict?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
