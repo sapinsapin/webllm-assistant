@@ -69,9 +69,16 @@ export const PRESET_MODELS: ModelPreset[] = [
     engine: "webllm",
   },
 
-  // ONNX models (WASM fallback — works everywhere including iOS)
-  // Note: ONNX LLM inference via WASM is experimental and slow.
-  // Users should provide their own ONNX model URL.
+  // Transformers.js models (WASM fallback — works everywhere including iOS)
+  {
+    id: "onnx-qwen3-0.6b",
+    name: "Qwen3 0.6B",
+    size: "~400MB",
+    url: "onnx-community/Qwen3-0.6B-ONNX",
+    description: "Qwen3 0.6B via Transformers.js. Works on all browsers (WASM). Slower than WebGPU.",
+    gated: false,
+    engine: "onnx",
+  },
 ];
 
 export function getModelsForEngine(engine: EngineType): ModelPreset[] {
