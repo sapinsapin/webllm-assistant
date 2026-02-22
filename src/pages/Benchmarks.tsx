@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Cpu, ArrowLeft, Zap, Timer, Gauge, Monitor, HardDrive } from "lucide-react";
+import {
+  Cpu, ArrowLeft, Zap, Timer, Gauge, Monitor, HardDrive,
+  ChevronDown, ChevronRight, FlaskConical,
+} from "lucide-react";
 import { Link } from "react-router-dom";
+import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkCategory } from "@/lib/models";
+
+interface PerPromptResult {
+  prompt: string;
+  category: string;
+  tokensGenerated: number;
+  timeMs: number;
+  tokensPerSecond: number;
+  ttftMs: number;
+  tpotMs: number;
+}
 
 interface BenchmarkRun {
   id: string;
@@ -11,7 +25,7 @@ interface BenchmarkRun {
   avg_tps: number;
   avg_ttft_ms: number;
   verdict: string;
-  results: any[];
+  results: PerPromptResult[];
   browser: string | null;
   os: string | null;
   cores: number | null;
@@ -21,12 +35,161 @@ interface BenchmarkRun {
   screen_res: string | null;
 }
 
-const VERDICT_STYLE: Record<string, string> = {
-  Great: "text-primary",
-  Passable: "text-yellow-400",
-  Slow: "text-orange-400",
-  "Not viable": "text-destructive",
+const VERDICT_STYLE: Record<string, { color: string; emoji: string }> = {
+  Great: { color: "text-primary", emoji: "🚀" },
+  Passable: { color: "text-yellow-400", emoji: "👍" },
+  Slow: { color: "text-orange-400", emoji: "🐢" },
+  "Not viable": { color: "text-destructive", emoji: "⛔" },
 };
+
+const CATEGORY_COLORS: Record<string, string> = {
+  ttft: "bg-primary/80",
+  short: "bg-primary/60",
+  medium: "bg-accent",
+  long: "bg-yellow-500",
+  reasoning: "bg-orange-400",
+};
+
+function MetricBar({ value, max, label, unit, color = "bg-primary" }: {
+  value: number; max: number; label: string; unit: string; color?: string;
+}) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[10px] font-mono">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="text-foreground font-semibold">{value.toFixed(1)} {unit}</span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function RunCard({ run }: { run: BenchmarkRun }) {
+  const [expanded, setExpanded] = useState(false);
+  const v = VERDICT_STYLE[run.verdict] || { color: "text-foreground", emoji: "❓" };
+  const results = (run.results || []) as PerPromptResult[];
+  const maxTps = results.length > 0 ? Math.max(...results.map(r => r.tokensPerSecond)) : 1;
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      {/* Header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-3 p-4 text-left hover:bg-secondary/20 transition-colors"
+      >
+        <span className="text-2xl">{v.emoji}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-sm font-bold font-mono ${v.color}`}>{run.verdict}</span>
+            <span className="text-xs font-mono text-muted-foreground truncate">{run.model_name}</span>
+            <span className="rounded border border-border bg-secondary/30 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+              {run.engine}
+            </span>
+          </div>
+          <div className="flex items-center gap-4 mt-1">
+            <span className="flex items-center gap-1 text-xs font-mono">
+              <Zap className="h-3 w-3 text-primary" />
+              <span className="text-foreground font-semibold">{run.avg_tps.toFixed(1)}</span>
+              <span className="text-muted-foreground">tok/s</span>
+            </span>
+            <span className="flex items-center gap-1 text-xs font-mono">
+              <Timer className="h-3 w-3 text-muted-foreground" />
+              <span className="text-foreground font-semibold">{run.avg_ttft_ms.toFixed(0)}</span>
+              <span className="text-muted-foreground">ms</span>
+            </span>
+            <span className="flex items-center gap-1 text-xs font-mono">
+              <Gauge className="h-3 w-3 text-muted-foreground" />
+              <span className="text-foreground font-semibold">{results.length}</span>
+              <span className="text-muted-foreground">tests</span>
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-[10px] font-mono text-muted-foreground/60">
+            {new Date(run.created_at).toLocaleDateString()}
+          </span>
+          {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </button>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div className="border-t border-border p-4 space-y-4">
+          {/* Per-prompt results as metric bars */}
+          {results.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">Per-test Results</h4>
+              <div className="space-y-2">
+                {results.map((r, i) => (
+                  <MetricBar
+                    key={i}
+                    value={r.tokensPerSecond}
+                    max={maxTps * 1.2}
+                    label={`${r.category?.toUpperCase() || "?"} · ${r.prompt.slice(0, 50)}${r.prompt.length > 50 ? "…" : ""}`}
+                    unit="tok/s"
+                    color={CATEGORY_COLORS[r.category] || "bg-primary"}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Detailed metrics grid */}
+          {results.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">Detailed Metrics</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px] font-mono">
+                  <thead>
+                    <tr className="text-muted-foreground border-b border-border">
+                      <th className="text-left py-1.5 pr-3">Test</th>
+                      <th className="text-right py-1.5 px-2">Tokens</th>
+                      <th className="text-right py-1.5 px-2">Time</th>
+                      <th className="text-right py-1.5 px-2">tok/s</th>
+                      <th className="text-right py-1.5 px-2">TTFT</th>
+                      <th className="text-right py-1.5 pl-2">TPOT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map((r, i) => (
+                      <tr key={i} className="border-b border-border/50 text-foreground">
+                        <td className="py-1.5 pr-3">
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${CATEGORY_COLORS[r.category] || "bg-primary"}`} />
+                          {r.prompt.slice(0, 35)}{r.prompt.length > 35 ? "…" : ""}
+                        </td>
+                        <td className="text-right py-1.5 px-2 text-muted-foreground">{r.tokensGenerated}</td>
+                        <td className="text-right py-1.5 px-2 text-muted-foreground">{(r.timeMs / 1000).toFixed(2)}s</td>
+                        <td className="text-right py-1.5 px-2 font-semibold text-primary">{r.tokensPerSecond.toFixed(1)}</td>
+                        <td className="text-right py-1.5 px-2 text-muted-foreground">{r.ttftMs.toFixed(0)}ms</td>
+                        <td className="text-right py-1.5 pl-2 text-muted-foreground">{r.tpotMs.toFixed(1)}ms</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Device info */}
+          <div className="space-y-1.5">
+            <h4 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">Device</h4>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-muted-foreground">
+              {run.browser && <span className="flex items-center gap-1"><Monitor className="h-3 w-3" /> {run.browser}</span>}
+              {run.os && <span>{run.os}</span>}
+              {run.cores && <span>{run.cores} cores</span>}
+              {run.ram_gb && <span>{run.ram_gb} GB RAM</span>}
+              {run.gpu && <span className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {run.gpu}</span>}
+              {run.screen_res && <span>{run.screen_res}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Benchmarks() {
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
@@ -39,7 +202,7 @@ export default function Benchmarks() {
       .order("created_at", { ascending: false })
       .limit(50)
       .then(({ data }) => {
-        setRuns((data as BenchmarkRun[]) || []);
+        setRuns((data as unknown as BenchmarkRun[]) || []);
         setLoading(false);
       });
   }, []);
@@ -64,93 +227,86 @@ export default function Benchmarks() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto max-w-4xl space-y-6">
+        <div className="mx-auto max-w-4xl space-y-8">
+          {/* Title */}
           <div>
-            <h1 className="text-2xl font-bold font-mono text-foreground">Latest Benchmarks</h1>
+            <h1 className="text-2xl font-bold font-mono text-foreground">Benchmarks</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Community benchmark results across different devices and browsers
+              QuickBench stress tests across different LLM workload scenarios
             </p>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <p className="text-sm text-muted-foreground font-mono animate-pulse">Loading...</p>
+          {/* Benchmark Prompts Catalog */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-bold font-mono text-foreground">Test Suite</h2>
+              <span className="rounded border border-border bg-secondary/30 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                {BENCHMARK_PROMPTS.length} prompts
+              </span>
             </div>
-          ) : runs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <p className="text-sm text-muted-foreground font-mono">No benchmark runs yet.</p>
-              <Link
-                to="/"
-                className="text-xs text-primary hover:underline font-mono"
-              >
-                Run your first benchmark →
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {runs.map((run) => (
-                <div
-                  key={run.id}
-                  className="rounded-lg border border-border bg-card p-4 space-y-3"
-                >
-                  {/* Top row: verdict + model + time */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className={`text-lg font-bold font-mono ${VERDICT_STYLE[run.verdict] || "text-foreground"}`}>
-                        {run.verdict}
-                      </span>
-                      <span className="text-xs font-mono text-muted-foreground">
-                        {run.model_name}
-                      </span>
-                      <span className="rounded-md border border-border bg-secondary/30 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                        {run.engine}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-muted-foreground/60">
-                      {new Date(run.created_at).toLocaleString()}
-                    </span>
-                  </div>
 
-                  {/* Stats row */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1 text-xs font-mono">
-                      <Zap className="h-3 w-3 text-primary" />
-                      <span className="text-foreground font-semibold">{run.avg_tps.toFixed(1)}</span>
-                      <span className="text-muted-foreground">tok/s</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {(Object.entries(BENCHMARK_CATEGORIES) as [BenchmarkCategory, { label: string; description: string }][]).map(
+                ([cat, meta]) => {
+                  const prompts = BENCHMARK_PROMPTS.filter((p) => p.category === cat);
+                  return (
+                    <div key={cat} className="rounded-lg border border-border bg-card p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block w-2 h-2 rounded-full ${CATEGORY_COLORS[cat]}`} />
+                        <span className="text-xs font-bold font-mono text-foreground">{meta.label}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">({prompts.length})</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{meta.description}</p>
+                      <div className="space-y-1">
+                        {prompts.map((p, i) => (
+                          <div key={i} className="flex items-start gap-1.5 text-[11px] font-mono">
+                            <span className="text-muted-foreground/50 mt-0.5">›</span>
+                            <div>
+                              <span className="text-foreground font-medium">{p.label}</span>
+                              <span className="text-muted-foreground ml-1.5">— {p.description}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 text-xs font-mono">
-                      <Timer className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-foreground font-semibold">{run.avg_ttft_ms.toFixed(0)}</span>
-                      <span className="text-muted-foreground">ms TTFT</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs font-mono">
-                      <Gauge className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-foreground font-semibold">{run.results?.length || 0}</span>
-                      <span className="text-muted-foreground">runs</span>
-                    </div>
-                  </div>
-
-                  {/* Device info row */}
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-muted-foreground/70">
-                    {run.browser && (
-                      <span className="flex items-center gap-1">
-                        <Monitor className="h-2.5 w-2.5" /> {run.browser}
-                      </span>
-                    )}
-                    {run.os && <span>{run.os}</span>}
-                    {run.cores && <span>{run.cores} cores</span>}
-                    {run.ram_gb && <span>{run.ram_gb} GB RAM</span>}
-                    {run.gpu && (
-                      <span className="flex items-center gap-1">
-                        <HardDrive className="h-2.5 w-2.5" /> {run.gpu}
-                      </span>
-                    )}
-                    {run.screen_res && <span>{run.screen_res}</span>}
-                  </div>
-                </div>
-              ))}
+                  );
+                }
+              )}
             </div>
-          )}
+          </section>
+
+          {/* Runs */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-bold font-mono text-foreground">Latest Runs</h2>
+              {runs.length > 0 && (
+                <span className="rounded border border-border bg-secondary/30 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                  {runs.length}
+                </span>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-sm text-muted-foreground font-mono animate-pulse">Loading...</p>
+              </div>
+            ) : runs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-lg border border-dashed border-border">
+                <p className="text-sm text-muted-foreground font-mono">No benchmark runs yet.</p>
+                <Link to="/" className="text-xs text-primary hover:underline font-mono">
+                  Run your first benchmark →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {runs.map((run) => (
+                  <RunCard key={run.id} run={run} />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </main>
     </div>
