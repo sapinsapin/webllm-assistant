@@ -1,11 +1,12 @@
 import { useRef, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import { ModelLoader } from "@/components/ModelLoader";
 import { QuickStart } from "@/components/QuickStart";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
-import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server } from "lucide-react";
+import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History } from "lucide-react";
 
 type Tab = "chat" | "benchmark";
 
@@ -83,6 +84,12 @@ const Index = () => {
                   <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
                   {currentModelName}
                 </span>
+                <Link
+                  to="/benchmarks"
+                  className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
+                >
+                  <History className="h-3 w-3" /> Benchmarks
+                </Link>
                 <button
                   onClick={() => {
                     unloadModel();
