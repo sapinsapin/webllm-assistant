@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkCategory } from "@/lib/models";
+import { useLlmInference } from "@/hooks/useLlmInference";
+import { QuickStart } from "@/components/QuickStart";
 
 interface PerPromptResult {
   prompt: string;
@@ -195,7 +197,12 @@ export default function Benchmarks() {
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const {
+    status, statusMessage, downloadProgress, activeEngine, capabilities,
+    loadModel, unloadModel, runBenchmarkPrompt,
+  } = useLlmInference();
+
+  const fetchRuns = () => {
     supabase
       .from("benchmark_runs")
       .select("*")
@@ -205,7 +212,19 @@ export default function Benchmarks() {
         setRuns((data as unknown as BenchmarkRun[]) || []);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchRuns();
   }, []);
+
+  // Refresh runs when a benchmark finishes
+  useEffect(() => {
+    if (status === "ready") {
+      const timer = setTimeout(fetchRuns, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -235,6 +254,30 @@ export default function Benchmarks() {
               QuickBench stress tests across different LLM workload scenarios
             </p>
           </div>
+
+          {/* QuickStart Runner */}
+          <section className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="border-b border-border px-4 py-2.5 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-bold font-mono text-foreground">Run QuickBench</h2>
+              <span className="text-[10px] text-muted-foreground font-mono">Full {BENCHMARK_PROMPTS.length}-prompt stress test</span>
+            </div>
+            <div className="min-h-[320px]">
+              <QuickStart
+                status={status}
+                statusMessage={statusMessage}
+                downloadProgress={downloadProgress}
+                activeEngine={activeEngine}
+                capabilities={capabilities}
+                onLoadModel={loadModel}
+                onAdvancedMode={() => {
+                  // Refresh runs after benchmark completes
+                  fetchRuns();
+                }}
+                onRunBenchmark={runBenchmarkPrompt}
+              />
+            </div>
+          </section>
 
           {/* Benchmark Prompts Catalog */}
           <section className="space-y-3">
