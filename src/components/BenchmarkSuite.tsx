@@ -9,6 +9,8 @@ import type { BenchmarkResult } from "@/hooks/useLlmInference";
 
 type Phase = "idle" | "downloading" | "benchmarking" | "done";
 
+const RUNS_PER_PROMPT = 3;
+
 const CATEGORY_COLORS: Record<string, string> = {
   ttft: "bg-primary/80",
   short: "bg-primary/60",
@@ -16,6 +18,38 @@ const CATEGORY_COLORS: Record<string, string> = {
   long: "bg-yellow-500",
   reasoning: "bg-orange-400",
 };
+
+interface AggregatedResult {
+  prompt: string;
+  category: string;
+  label: string;
+  runs: BenchmarkResult[];
+  meanTps: number;
+  stdTps: number;
+  meanTtft: number;
+  stdTtft: number;
+  meanTokens: number;
+}
+
+function mean(arr: number[]) {
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function std(arr: number[], m: number) {
+  return Math.sqrt(arr.reduce((a, v) => a + (v - m) ** 2, 0) / arr.length);
+}
+
+function buildAggregated(prompt: string, category: string, label: string, runs: BenchmarkResult[]): AggregatedResult {
+  const meanTps = mean(runs.map(r => r.tokensPerSecond));
+  const meanTtft = mean(runs.map(r => r.ttftMs));
+  return {
+    prompt, category, label, runs, meanTps,
+    stdTps: std(runs.map(r => r.tokensPerSecond), meanTps),
+    meanTtft,
+    stdTtft: std(runs.map(r => r.ttftMs), meanTtft),
+    meanTokens: mean(runs.map(r => r.tokensGenerated)),
+  };
+}
 
 const VERDICTS = [
   { min: 15, label: "Yes, you can AI!", emoji: "🚀", color: "text-primary", description: "Your device handles AI smoothly." },
@@ -32,6 +66,8 @@ interface BenchmarkSuiteProps {
   onComplete?: () => void;
 }
 
+const totalSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
+
 export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const {
     status, statusMessage, downloadProgress, activeEngine, capabilities,
@@ -42,9 +78,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const engine = model?.engine || activeEngine || "onnx";
 
   const [phase, setPhase] = useState<Phase>("idle");
-  const [results, setResults] = useState<BenchmarkResult[]>([]);
+  const [aggregated, setAggregated] = useState<AggregatedResult[]>([]);
   const [progress, setProgress] = useState(0);
   const [currentPromptIdx, setCurrentPromptIdx] = useState(-1);
+  const [currentRun, setCurrentRun] = useState(0);
 
   const noEngine = capabilities.length > 0 && !capabilities.some((c) => c.available);
 
@@ -53,41 +90,61 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     if (status === "ready" && phase === "downloading") setPhase("benchmarking");
   }, [status, phase]);
 
-  // Run prompts
+  // Run prompts × RUNS_PER_PROMPT
   useEffect(() => {
     if (phase !== "benchmarking") return;
     let cancelled = false;
 
     (async () => {
-      const out: BenchmarkResult[] = [];
+      const allRuns: Map<number, BenchmarkResult[]> = new Map();
+      let step = 0;
+
       for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
+        allRuns.set(i, []);
+        for (let run = 0; run < RUNS_PER_PROMPT; run++) {
+          if (cancelled) break;
+          setCurrentPromptIdx(i);
+          setCurrentRun(run + 1);
+          setProgress((step / totalSteps) * 100);
+          const r = await runBenchmarkPrompt(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category);
+          if (r) allRuns.get(i)!.push(r);
+          step++;
+        }
         if (cancelled) break;
-        setCurrentPromptIdx(i);
-        setProgress((i / BENCHMARK_PROMPTS.length) * 100);
-        const r = await runBenchmarkPrompt(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category);
-        if (r) out.push(r);
       }
+
       if (cancelled) return;
-      setResults(out);
+
+      const agg: AggregatedResult[] = [];
+      for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
+        const runs = allRuns.get(i) || [];
+        if (runs.length > 0) {
+          agg.push(buildAggregated(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category, BENCHMARK_PROMPTS[i].label, runs));
+        }
+      }
+
+      setAggregated(agg);
       setProgress(100);
       setCurrentPromptIdx(-1);
+      setCurrentRun(0);
       setPhase("done");
 
-      const tps = out.length > 0 ? out.reduce((a, r) => a + r.tokensPerSecond, 0) / out.length : 0;
-      const ttft = out.length > 0 ? out.reduce((a, r) => a + r.ttftMs, 0) / out.length : 0;
-      const v = getVerdict(tps);
+      const avgTps = agg.length > 0 ? mean(agg.map(a => a.meanTps)) : 0;
+      const avgTtft = agg.length > 0 ? mean(agg.map(a => a.meanTtft)) : 0;
+      const v = getVerdict(avgTps);
 
-      toast({ title: `${v.emoji} ${v.label} — ${tps.toFixed(1)} tok/s`, description: v.description });
+      toast({ title: `${v.emoji} ${v.label} — ${avgTps.toFixed(1)} tok/s`, description: v.description });
 
-      // Persist
+      // Persist — flatten all runs for the results payload
+      const allResults = agg.flatMap(a => a.runs);
       getDeviceInfo().then((device) => {
         supabase.from("benchmark_runs").insert({
-          model_name: out[0]?.modelName || "Unknown",
+          model_name: allResults[0]?.modelName || "Unknown",
           engine,
-          avg_tps: tps,
-          avg_ttft_ms: ttft,
+          avg_tps: avgTps,
+          avg_ttft_ms: avgTtft,
           verdict: v.label,
-          results: out.map((r) => ({
+          results: allResults.map((r) => ({
             prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
             timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
           })),
@@ -107,21 +164,22 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const handleRun = () => {
     if (!model || noEngine) return;
     setPhase("downloading");
-    setResults([]);
+    setAggregated([]);
     setProgress(0);
     loadModel(model.url, model.name, undefined, model.engine);
   };
 
   const handleRetry = () => {
     setPhase("idle");
-    setResults([]);
+    setAggregated([]);
     setProgress(0);
     setCurrentPromptIdx(-1);
+    setCurrentRun(0);
   };
 
   const isActive = phase === "downloading" || phase === "benchmarking";
-  const avgTps = results.length > 0 ? results.reduce((a, r) => a + r.tokensPerSecond, 0) / results.length : 0;
-  const avgTtft = results.length > 0 ? results.reduce((a, r) => a + r.ttftMs, 0) / results.length : 0;
+  const avgTps = aggregated.length > 0 ? mean(aggregated.map(a => a.meanTps)) : 0;
+  const avgTtft = aggregated.length > 0 ? mean(aggregated.map(a => a.meanTtft)) : 0;
   const verdict = getVerdict(avgTps);
 
   return (
@@ -132,7 +190,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
         <div className="flex-1">
           <h2 className="text-sm font-bold font-mono text-foreground">Can I AI? — Full Test Suite</h2>
           <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-            Runs {BENCHMARK_PROMPTS.length} prompts across {Object.keys(BENCHMARK_CATEGORIES).length} categories, then tells you if your device can handle on-device AI.
+            Runs {BENCHMARK_PROMPTS.length} prompts × {RUNS_PER_PROMPT} runs each ({totalSteps} total) to account for variance.
           </p>
         </div>
         {phase === "idle" && (
@@ -177,9 +235,9 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
             </div>
             <div className="rounded-lg border border-border bg-secondary/30 p-2.5 text-center">
               <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground mb-0.5">
-                <Gauge className="h-3 w-3" /> Runs
+                <Gauge className="h-3 w-3" /> Prompts
               </div>
-              <p className="text-base font-bold font-mono text-foreground">{results.length}/{BENCHMARK_PROMPTS.length}</p>
+              <p className="text-base font-bold font-mono text-foreground">{aggregated.length}/{BENCHMARK_PROMPTS.length}</p>
             </div>
           </div>
         </div>
@@ -191,7 +249,9 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-muted-foreground flex items-center gap-1.5">
               <Loader2 className="h-3 w-3 animate-spin text-primary" />
-              {phase === "downloading" ? `Downloading ${model?.name} (${model?.size})…` : `Running prompt ${currentPromptIdx + 1}/${BENCHMARK_PROMPTS.length}…`}
+              {phase === "downloading"
+                ? `Downloading ${model?.name} (${model?.size})…`
+                : `Prompt ${currentPromptIdx + 1}/${BENCHMARK_PROMPTS.length} · run ${currentRun}/${RUNS_PER_PROMPT}`}
             </span>
             <span className="text-foreground font-semibold">{Math.round(phase === "downloading" ? downloadProgress : progress)}%</span>
           </div>
@@ -227,27 +287,31 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
                 </div>
                 <div className="space-y-1">
                   {prompts.map((p) => {
-                    const result = phase === "done" ? results.find((r) => r.prompt === p.prompt) : undefined;
+                    const agg = phase === "done" ? aggregated.find((a) => a.prompt === p.prompt) : undefined;
                     const isRunning = phase === "benchmarking" && currentPromptIdx === p.idx;
                     return (
                       <div
                         key={p.idx}
                         className={`flex items-center justify-between rounded-md px-2.5 py-1.5 text-[11px] font-mono transition-colors ${
-                          isRunning ? "bg-primary/10 border border-primary/30" : result ? "bg-secondary/30" : ""
+                          isRunning ? "bg-primary/10 border border-primary/30" : agg ? "bg-secondary/30" : ""
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          {isRunning && <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />}
-                          {result && <span className="text-primary shrink-0">✓</span>}
-                          {!isRunning && !result && <span className="text-muted-foreground/30 shrink-0">○</span>}
+                          {isRunning && (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+                              <span className="text-muted-foreground shrink-0">run {currentRun}/{RUNS_PER_PROMPT}</span>
+                            </>
+                          )}
+                          {agg && <span className="text-primary shrink-0">✓</span>}
+                          {!isRunning && !agg && <span className="text-muted-foreground/30 shrink-0">○</span>}
                           <span className="text-foreground font-medium">{p.label}</span>
                           <span className="text-muted-foreground truncate hidden sm:inline">— {p.description}</span>
                         </div>
-                        {result && (
+                        {agg && (
                           <div className="flex items-center gap-3 shrink-0 ml-2">
-                            <span className="text-primary font-semibold">{result.tokensPerSecond.toFixed(1)} tok/s</span>
-                            <span className="text-muted-foreground">{result.ttftMs.toFixed(0)}ms</span>
-                            <span className="text-muted-foreground">{result.tokensGenerated} tok</span>
+                            <span className="text-primary font-semibold">{agg.meanTps.toFixed(1)} <span className="text-muted-foreground font-normal">±{agg.stdTps.toFixed(1)}</span> tok/s</span>
+                            <span className="text-muted-foreground">{agg.meanTtft.toFixed(0)}±{agg.stdTtft.toFixed(0)}ms</span>
                           </div>
                         )}
                       </div>
