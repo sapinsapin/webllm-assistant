@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import { ModelLoader } from "@/components/ModelLoader";
+import { QuickStart } from "@/components/QuickStart";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
@@ -22,6 +23,7 @@ const Index = () => {
   } = useLlmInference();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>("chat");
+  const [advancedMode, setAdvancedMode] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -31,66 +33,84 @@ const Index = () => {
 
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
+  // Show quick start (simple GO page) when not ready and not in advanced mode
+  const showQuickStart = status !== "ready" && !advancedMode;
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="flex items-center gap-2 border-b border-border px-6 py-3">
-        <Cpu className="h-5 w-5 text-primary" />
-        <span className="font-mono text-sm font-semibold">
-          <span className="text-primary">Edge</span>
-          <span className="text-foreground">LLM</span>
-        </span>
+      {/* Header — hide in quick start mode for cleaner look */}
+      {!showQuickStart && (
+        <header className="flex items-center gap-2 border-b border-border px-6 py-3">
+          <Cpu className="h-5 w-5 text-primary" />
+          <span className="font-mono text-sm font-semibold">
+            <span className="text-primary">Edge</span>
+            <span className="text-foreground">LLM</span>
+          </span>
 
-        {status === "ready" && (
-          <>
-            {/* Tabs */}
-            <div className="ml-6 flex items-center gap-1 rounded-lg border border-border bg-secondary/30 p-0.5">
-              <button
-                onClick={() => setActiveTab("chat")}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                  activeTab === "chat"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <MessageSquare className="h-3 w-3" /> Chat
-              </button>
-              <button
-                onClick={() => setActiveTab("benchmark")}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                  activeTab === "benchmark"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <BarChart3 className="h-3 w-3" /> Benchmark
-              </button>
-            </div>
+          {status === "ready" && (
+            <>
+              {/* Tabs */}
+              <div className="ml-6 flex items-center gap-1 rounded-lg border border-border bg-secondary/30 p-0.5">
+                <button
+                  onClick={() => setActiveTab("chat")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "chat"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <MessageSquare className="h-3 w-3" /> Chat
+                </button>
+                <button
+                  onClick={() => setActiveTab("benchmark")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "benchmark"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <BarChart3 className="h-3 w-3" /> Benchmark
+                </button>
+              </div>
 
-            <div className="ml-auto flex items-center gap-3">
-              {engineInfo && (
-                <span className="flex items-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
-                  {engineInfo.icon} {engineInfo.label}
+              <div className="ml-auto flex items-center gap-3">
+                {engineInfo && (
+                  <span className="flex items-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                    {engineInfo.icon} {engineInfo.label}
+                  </span>
+                )}
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
+                  {currentModelName}
                 </span>
-              )}
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
-                {currentModelName}
-              </span>
-              <button
-                onClick={unloadModel}
-                className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
-              >
-                <RotateCcw className="h-3 w-3" /> Switch
-              </button>
-            </div>
-          </>
-        )}
-      </header>
+                <button
+                  onClick={() => {
+                    unloadModel();
+                    setAdvancedMode(false);
+                  }}
+                  className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
+                >
+                  <RotateCcw className="h-3 w-3" /> Switch
+                </button>
+              </div>
+            </>
+          )}
+        </header>
+      )}
 
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-hidden">
-        {status !== "ready" ? (
+        {showQuickStart ? (
+          <QuickStart
+            status={status}
+            statusMessage={statusMessage}
+            downloadProgress={downloadProgress}
+            activeEngine={activeEngine}
+            capabilities={capabilities}
+            onLoadModel={loadModel}
+            onAdvancedMode={() => setAdvancedMode(true)}
+          />
+        ) : status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">
             <ModelLoader
               status={status}

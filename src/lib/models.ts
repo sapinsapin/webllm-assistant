@@ -78,6 +78,12 @@ export function getModelsForEngine(engine: EngineType): ModelPreset[] {
   return PRESET_MODELS.filter((m) => m.engine === engine);
 }
 
+/** Returns the smallest (first listed) non-gated model for an engine, or the first model available. */
+export function getSmallestModel(engine: EngineType): ModelPreset | null {
+  const models = getModelsForEngine(engine);
+  return models.find((m) => !m.gated) || models[0] || null;
+}
+
 export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning";
 
 export interface BenchmarkPrompt {
