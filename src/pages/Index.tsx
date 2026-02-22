@@ -4,13 +4,20 @@ import { ModelLoader } from "@/components/ModelLoader";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
-import { Cpu, MessageSquare, BarChart3, RotateCcw } from "lucide-react";
+import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server } from "lucide-react";
 
 type Tab = "chat" | "benchmark";
+
+const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
+  mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
+  webllm: { icon: <Globe className="h-3 w-3" />, label: "WebLLM" },
+  onnx: { icon: <Server className="h-3 w-3" />, label: "ONNX" },
+};
 
 const Index = () => {
   const {
     status, statusMessage, downloadProgress, messages, isGenerating, currentModelName,
+    activeEngine, capabilities,
     loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
   } = useLlmInference();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -21,6 +28,8 @@ const Index = () => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -59,6 +68,11 @@ const Index = () => {
             </div>
 
             <div className="ml-auto flex items-center gap-3">
+              {engineInfo && (
+                <span className="flex items-center gap-1 rounded-md border border-border bg-secondary/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                  {engineInfo.icon} {engineInfo.label}
+                </span>
+              )}
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
                 {currentModelName}
@@ -82,6 +96,8 @@ const Index = () => {
               status={status}
               statusMessage={statusMessage}
               downloadProgress={downloadProgress}
+              activeEngine={activeEngine}
+              capabilities={capabilities}
               onLoadModel={loadModel}
             />
           </div>
