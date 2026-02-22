@@ -105,9 +105,18 @@ export class MediaPipeEngine implements InferenceEngine {
 
   async generateStream(prompt: string, callbacks: InferenceCallbacks): Promise<void> {
     if (!this.llm) throw new Error("Model not loaded");
-    await this.llm.generateResponse(prompt, (partial: string, done: boolean) => {
-      callbacks.onToken(partial);
-      if (done) callbacks.onComplete();
+    await new Promise<void>((resolve, reject) => {
+      try {
+        this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
+          callbacks.onToken(partial);
+          if (done) {
+            callbacks.onComplete();
+            resolve();
+          }
+        });
+      } catch (err) {
+        reject(err);
+      }
     });
   }
 
@@ -119,10 +128,17 @@ export class MediaPipeEngine implements InferenceEngine {
     let response = "";
     let firstTokenTime: number | null = null;
 
-    await this.llm.generateResponse(prompt, (partial: string) => {
-      if (firstTokenTime === null) firstTokenTime = performance.now();
-      response += partial;
-      tokenCount++;
+    await new Promise<void>((resolve, reject) => {
+      try {
+        this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
+          if (firstTokenTime === null) firstTokenTime = performance.now();
+          response += partial;
+          tokenCount++;
+          if (done) resolve();
+        });
+      } catch (err) {
+        reject(err);
+      }
     });
 
     const end = performance.now();
