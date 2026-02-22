@@ -43,8 +43,8 @@ const Index = () => {
         <header className="flex items-center gap-2 border-b border-border px-6 py-3">
           <Cpu className="h-5 w-5 text-primary" />
           <span className="font-mono text-sm font-semibold">
-            <span className="text-primary">Edge</span>
-            <span className="text-foreground">LLM</span>
+            <span className="text-primary">Can I</span>
+            <span className="text-foreground"> AI?</span>
           </span>
 
           {status === "ready" && (
@@ -109,6 +109,7 @@ const Index = () => {
             capabilities={capabilities}
             onLoadModel={loadModel}
             onAdvancedMode={() => setAdvancedMode(true)}
+            onRunBenchmark={runBenchmarkPrompt}
           />
         ) : status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">
