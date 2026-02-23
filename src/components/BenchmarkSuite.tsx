@@ -17,6 +17,9 @@ const CATEGORY_COLORS: Record<string, string> = {
   medium: "bg-accent",
   long: "bg-yellow-500",
   reasoning: "bg-orange-400",
+  long_context: "bg-purple-500",
+  multi_turn: "bg-cyan-500",
+  concurrent: "bg-rose-500",
 };
 
 interface AggregatedResult {
@@ -71,7 +74,7 @@ const totalSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
 export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const {
     status, statusMessage, downloadProgress, activeEngine, capabilities,
-    loadModel, runBenchmarkPrompt,
+    loadModel, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
 
   const model = getBestQuickStartModel(capabilities);
@@ -108,7 +111,17 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
             setCurrentRun(run + 1);
             setProgress((step / totalSteps) * 100);
             try {
-              const r = await runBenchmarkPrompt(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category);
+              const bp = BENCHMARK_PROMPTS[i];
+              let r: BenchmarkResult | null = null;
+              if (bp.category === "long_context" && bp.context) {
+                r = await runLongContextBenchmark(bp.prompt, bp.context, bp.category);
+              } else if (bp.category === "multi_turn" && bp.turns) {
+                r = await runMultiTurnBenchmark(bp.turns, bp.category);
+              } else if (bp.category === "concurrent" && bp.concurrency) {
+                r = await runConcurrentBenchmark(bp.prompt, bp.concurrency, bp.category);
+              } else {
+                r = await runBenchmarkPrompt(bp.prompt, bp.category);
+              }
               if (r) allRuns.get(i)!.push(r);
             } catch (promptErr) {
               console.warn(`Benchmark prompt ${i} run ${run} failed:`, promptErr);
@@ -175,7 +188,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, runBenchmarkPrompt, engine, onComplete]);
+  }, [phase, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark, engine, onComplete]);
 
   const handleRun = () => {
     if (!model || noEngine) return;

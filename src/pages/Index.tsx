@@ -21,6 +21,7 @@ const Index = () => {
     status, statusMessage, downloadProgress, messages, isGenerating, currentModelName,
     activeEngine, capabilities,
     loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
+    runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>("chat");
@@ -117,6 +118,9 @@ const Index = () => {
             onLoadModel={loadModel}
             onAdvancedMode={() => setAdvancedMode(true)}
             onRunBenchmark={runBenchmarkPrompt}
+            onRunLongContext={runLongContextBenchmark}
+            onRunMultiTurn={runMultiTurnBenchmark}
+            onRunConcurrent={runConcurrentBenchmark}
           />
         ) : status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">

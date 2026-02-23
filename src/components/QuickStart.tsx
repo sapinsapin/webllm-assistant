@@ -55,6 +55,9 @@ interface QuickStartProps {
   onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
   onAdvancedMode: () => void;
   onRunBenchmark: (prompt: string, category?: string) => Promise<BenchmarkResult | null>;
+  onRunLongContext?: (prompt: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
+  onRunMultiTurn?: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
+  onRunConcurrent?: (prompt: string, concurrency: number, category?: string) => Promise<BenchmarkResult | null>;
 }
 
 const ENGINE_LABEL: Record<EngineType, string> = {
@@ -75,6 +78,9 @@ export function QuickStart({
   onLoadModel,
   onAdvancedMode,
   onRunBenchmark,
+  onRunLongContext,
+  onRunMultiTurn,
+  onRunConcurrent,
 }: QuickStartProps) {
   const navigate = useNavigate();
   const model = getBestQuickStartModel(capabilities);
@@ -105,7 +111,17 @@ export function QuickStart({
           if (cancelled) break;
           setBenchProgress(((i) / QUICK_PROMPTS.length) * 100);
           try {
-            const r = await onRunBenchmark(QUICK_PROMPTS[i].prompt, QUICK_PROMPTS[i].category);
+            const bp = QUICK_PROMPTS[i];
+            let r: BenchmarkResult | null = null;
+            if (bp.category === "long_context" && bp.context && onRunLongContext) {
+              r = await onRunLongContext(bp.prompt, bp.context, bp.category);
+            } else if (bp.category === "multi_turn" && bp.turns && onRunMultiTurn) {
+              r = await onRunMultiTurn(bp.turns, bp.category);
+            } else if (bp.category === "concurrent" && bp.concurrency && onRunConcurrent) {
+              r = await onRunConcurrent(bp.prompt, bp.concurrency, bp.category);
+            } else {
+              r = await onRunBenchmark(bp.prompt, bp.category);
+            }
             if (r) results.push(r);
           } catch (promptErr) {
             console.warn(`QuickStart prompt ${i} failed:`, promptErr);
