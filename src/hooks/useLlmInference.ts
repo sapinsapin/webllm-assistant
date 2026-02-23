@@ -163,6 +163,129 @@ export function useLlmInference() {
     [currentModelName]
   );
 
+  /** Run a prompt with prepended context (long context benchmark) */
+  const runLongContextBenchmark = useCallback(
+    async (promptText: string, context: string, category: string = "long_context"): Promise<BenchmarkResult | null> => {
+      const engine = engineRef.current;
+      if (!engine) return null;
+
+      const combinedPrompt = `${context}\n\n${promptText}`;
+      const fullPrompt = engine.formatPrompt([{ role: "user", content: combinedPrompt }]);
+
+      try {
+        const result = await engine.generateFull(fullPrompt);
+        return {
+          modelName: currentModelName,
+          prompt: promptText,
+          category,
+          tokensGenerated: result.tokenCount,
+          timeMs: result.timeMs,
+          tokensPerSecond: result.tokenCount / (result.timeMs / 1000),
+          ttftMs: result.ttftMs,
+          tpotMs: result.tpotMs,
+          response: result.response,
+        };
+      } catch (err) {
+        console.error("Long context benchmark error:", err);
+        return null;
+      }
+    },
+    [currentModelName]
+  );
+
+  /** Run a multi-turn conversation and return aggregate result */
+  const runMultiTurnBenchmark = useCallback(
+    async (turns: string[], category: string = "multi_turn"): Promise<BenchmarkResult | null> => {
+      const engine = engineRef.current;
+      if (!engine) return null;
+
+      try {
+        const conversation: Array<{ role: "user" | "assistant"; content: string }> = [];
+        let totalTokens = 0;
+        let totalTimeMs = 0;
+        let firstTtft = 0;
+        const tpots: number[] = [];
+        let lastResponse = "";
+
+        for (let i = 0; i < turns.length; i++) {
+          conversation.push({ role: "user", content: turns[i] });
+          const fullPrompt = engine.formatPrompt(conversation);
+          const result = await engine.generateFull(fullPrompt);
+
+          conversation.push({ role: "assistant", content: result.response });
+          totalTokens += result.tokenCount;
+          totalTimeMs += result.timeMs;
+          if (i === 0) firstTtft = result.ttftMs;
+          if (result.tpotMs > 0) tpots.push(result.tpotMs);
+          lastResponse = result.response;
+        }
+
+        const avgTpot = tpots.length > 0 ? tpots.reduce((a, b) => a + b, 0) / tpots.length : 0;
+
+        return {
+          modelName: currentModelName,
+          prompt: turns.join(" → "),
+          category,
+          tokensGenerated: totalTokens,
+          timeMs: totalTimeMs,
+          tokensPerSecond: totalTokens / (totalTimeMs / 1000),
+          ttftMs: firstTtft,
+          tpotMs: avgTpot,
+          response: lastResponse,
+        };
+      } catch (err) {
+        console.error("Multi-turn benchmark error:", err);
+        return null;
+      }
+    },
+    [currentModelName]
+  );
+
+  /** Fire N concurrent requests and return aggregate result */
+  const runConcurrentBenchmark = useCallback(
+    async (promptText: string, concurrency: number, category: string = "concurrent"): Promise<BenchmarkResult | null> => {
+      const engine = engineRef.current;
+      if (!engine) return null;
+
+      const fullPrompt = engine.formatPrompt([{ role: "user", content: promptText }]);
+
+      try {
+        const start = performance.now();
+        // Fire all requests concurrently (engine may serialize internally, which is what we're measuring)
+        const promises = Array.from({ length: concurrency }, () => engine.generateFull(fullPrompt));
+        const results = await Promise.allSettled(promises);
+        const end = performance.now();
+
+        const fulfilled = results
+          .filter((r): r is PromiseFulfilledResult<import("@/lib/inference/types").GenerationResult> => r.status === "fulfilled")
+          .map(r => r.value);
+
+        if (fulfilled.length === 0) return null;
+
+        const totalTokens = fulfilled.reduce((a, r) => a + r.tokenCount, 0);
+        const wallTimeMs = end - start;
+        const avgTtft = fulfilled.reduce((a, r) => a + r.ttftMs, 0) / fulfilled.length;
+        const avgTpot = fulfilled.reduce((a, r) => a + r.tpotMs, 0) / fulfilled.length;
+
+        return {
+          modelName: currentModelName,
+          prompt: `${concurrency}× ${promptText}`,
+          category,
+          tokensGenerated: totalTokens,
+          timeMs: wallTimeMs,
+          tokensPerSecond: totalTokens / (wallTimeMs / 1000),
+          ttftMs: avgTtft,
+          tpotMs: avgTpot,
+          response: `${fulfilled.length}/${concurrency} completed`,
+        };
+      } catch (err) {
+        console.error("Concurrent benchmark error:", err);
+        return null;
+      }
+    },
+    [currentModelName]
+  );
+
   return {
     status,
     statusMessage,
@@ -176,5 +299,8 @@ export function useLlmInference() {
     unloadModel,
     sendMessage,
     runBenchmarkPrompt,
+    runLongContextBenchmark,
+    runMultiTurnBenchmark,
+    runConcurrentBenchmark,
   };
 }

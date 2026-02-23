@@ -52,6 +52,9 @@ const CATEGORY_COLORS: Record<string, string> = {
   medium: "bg-accent",
   long: "bg-yellow-500",
   reasoning: "bg-orange-400",
+  long_context: "bg-purple-500",
+  multi_turn: "bg-cyan-500",
+  concurrent: "bg-rose-500",
 };
 
 function MetricBar({ value, max, label, unit, color = "bg-primary" }: {

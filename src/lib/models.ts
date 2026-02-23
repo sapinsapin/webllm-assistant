@@ -101,14 +101,22 @@ export function getBestQuickStartModel(capabilities: { engine: EngineType; avail
   return null;
 }
 
-export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning";
+export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning" | "long_context" | "multi_turn" | "concurrent";
 
 export interface BenchmarkPrompt {
   label: string;
   prompt: string;
   category: BenchmarkCategory;
   description: string;
+  /** For multi_turn: the conversation turns to send sequentially */
+  turns?: string[];
+  /** For concurrent: number of parallel requests to fire */
+  concurrency?: number;
+  /** For long_context: prefix context to prepend to the prompt */
+  context?: string;
 }
+
+const LONG_CONTEXT_PASSAGE = `The following is a detailed technical document about distributed systems architecture. Distributed systems are collections of independent computers that appear to users as a single coherent system. They share state and coordinate actions through message passing. Key challenges include: (1) Network partitions - when nodes cannot communicate, the system must decide between consistency and availability per the CAP theorem. (2) Consensus - algorithms like Paxos and Raft ensure nodes agree on shared state despite failures. (3) Replication - data is copied across nodes for fault tolerance, using strategies like leader-follower or multi-leader replication. (4) Consistency models range from strong (linearizability) to weak (eventual consistency). (5) Clock synchronization is difficult; logical clocks (Lamport, vector) provide ordering without wall-clock agreement. (6) Failure detection uses heartbeats and phi-accrual detectors. (7) Sharding partitions data across nodes using hash or range partitioning. (8) Load balancing distributes requests evenly. (9) Service discovery enables nodes to find each other dynamically. (10) Observability through distributed tracing, metrics, and structured logging is essential for debugging. Modern microservice architectures face all these challenges simultaneously, requiring careful trade-off analysis for each subsystem.`;
 
 export const BENCHMARK_CATEGORIES: Record<BenchmarkCategory, { label: string; description: string }> = {
   ttft: { label: "TTFT", description: "Time to First Token — minimal output, measures prefill latency" },
@@ -116,9 +124,13 @@ export const BENCHMARK_CATEGORIES: Record<BenchmarkCategory, { label: string; de
   medium: { label: "Medium", description: "Medium generation (~1 paragraph)" },
   long: { label: "Long", description: "Long generation (~multiple paragraphs)" },
   reasoning: { label: "Reasoning", description: "Multi-step reasoning tasks" },
+  long_context: { label: "Long Context", description: "Large input context — measures prefill speed at scale" },
+  multi_turn: { label: "Multi-Turn", description: "Multi-turn conversation — measures context accumulation overhead" },
+  concurrent: { label: "Concurrent", description: "Parallel requests — measures throughput under load" },
 };
 
 export const BENCHMARK_PROMPTS: BenchmarkPrompt[] = [
+  // Existing categories
   { label: "Single word", prompt: "What is 2+2? Reply with just the number.", category: "ttft", description: "Measures pure prefill latency" },
   { label: "Yes/No", prompt: "Is the sky blue? Answer only yes or no.", category: "ttft", description: "Minimal decode, isolates TTFT" },
   { label: "Capital", prompt: "What is the capital of France?", category: "short", description: "One-sentence factual answer" },
@@ -129,4 +141,62 @@ export const BENCHMARK_PROMPTS: BenchmarkPrompt[] = [
   { label: "Story", prompt: "Write a short story about a robot discovering emotions for the first time. Make it at least 3 paragraphs.", category: "long", description: "Creative long-form generation" },
   { label: "Math", prompt: "If a train travels 60 mph for 2.5 hours, how far does it go? Explain step by step.", category: "reasoning", description: "Step-by-step math reasoning" },
   { label: "Logic", prompt: "There are 5 houses in a row. The red house is to the left of the blue house. The green house is between the red and yellow houses. The white house is at the far right. What is the order of houses from left to right? Think step by step.", category: "reasoning", description: "Multi-step logic puzzle" },
+
+  // Long context
+  {
+    label: "Context QA",
+    prompt: "Based on the document above, what are the two main consensus algorithms mentioned and why are they important?",
+    category: "long_context",
+    description: "Question over ~300 word technical passage",
+    context: LONG_CONTEXT_PASSAGE,
+  },
+  {
+    label: "Context Summary",
+    prompt: "Summarize the above document in exactly 3 bullet points.",
+    category: "long_context",
+    description: "Summarization of long input context",
+    context: LONG_CONTEXT_PASSAGE,
+  },
+
+  // Multi-turn
+  {
+    label: "3-turn chat",
+    prompt: "What is photosynthesis?",
+    category: "multi_turn",
+    description: "3-turn conversation with follow-ups",
+    turns: [
+      "What is photosynthesis?",
+      "What are the two main stages?",
+      "Why is it important for life on Earth?",
+    ],
+  },
+  {
+    label: "5-turn drill",
+    prompt: "Name a programming language.",
+    category: "multi_turn",
+    description: "5-turn deepening conversation",
+    turns: [
+      "Name a programming language.",
+      "What is it mainly used for?",
+      "Give me a simple code example.",
+      "What are its main advantages?",
+      "What are its main disadvantages?",
+    ],
+  },
+
+  // Concurrent
+  {
+    label: "2× parallel",
+    prompt: "What is the speed of light?",
+    category: "concurrent",
+    description: "2 simultaneous requests",
+    concurrency: 2,
+  },
+  {
+    label: "4× parallel",
+    prompt: "Define gravity in one sentence.",
+    category: "concurrent",
+    description: "4 simultaneous requests",
+    concurrency: 4,
+  },
 ];
