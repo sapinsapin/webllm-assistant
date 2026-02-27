@@ -10,7 +10,7 @@ import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { getBestQuickStartModel } from "@/lib/models";
 import { BENCHMARK_PROMPTS } from "@/lib/models";
 
-type Phase = "idle" | "downloading" | "benchmarking" | "done";
+type Phase = "idle" | "downloading" | "ready_to_bench" | "benchmarking" | "done";
 
 interface Verdict {
   label: string;
@@ -92,10 +92,10 @@ export function QuickStart({
 
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
 
-  // When model becomes ready, start benchmark automatically
+  // When model becomes ready after download, pause at ready_to_bench
   useEffect(() => {
     if (status === "ready" && phase === "downloading") {
-      setPhase("benchmarking");
+      setPhase("ready_to_bench");
     }
   }, [status, phase]);
 
@@ -190,8 +190,12 @@ export function QuickStart({
     onLoadModel(model.url, model.name, undefined, model.engine);
   };
 
+  const handleStartBenchmark = () => {
+    setPhase("benchmarking");
+  };
+
   const handleRetry = () => {
-    setPhase("idle");
+    setPhase("ready_to_bench");
     setBenchResults([]);
     setBenchProgress(0);
   };
@@ -279,6 +283,60 @@ export function QuickStart({
               📊 All Benchmarks
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- READY TO BENCHMARK SCREEN ---
+  if (phase === "ready_to_bench") {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6 select-none">
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl font-bold tracking-tight font-mono">
+            <span className="text-primary glow-text">Can I</span>
+            <span className="text-foreground"> AI?</span>
+          </h1>
+        </div>
+
+        <div className="text-center space-y-3 max-w-xs">
+          <p className="text-4xl">✅</p>
+          <h2 className="text-xl font-bold font-mono text-primary">Model Ready</h2>
+          <p className="text-sm text-muted-foreground">
+            <span className="text-foreground font-medium">{model?.name}</span> is loaded and ready.
+          </p>
+          <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+            The benchmark will send <span className="text-foreground font-medium">{QUICK_PROMPTS.length} prompts</span> to the model — including reasoning, creative, long context, multi-turn, and concurrent tests — to measure your device's AI performance.
+          </p>
+        </div>
+
+        <button
+          onClick={handleStartBenchmark}
+          className="group relative flex items-center justify-center"
+        >
+          <div className="absolute h-44 w-44 rounded-full border-2 border-border group-hover:border-primary/50 transition-all duration-500" />
+          <div className="relative flex h-36 w-36 flex-col items-center justify-center rounded-full border border-border bg-card group-hover:border-primary/40 group-hover:bg-primary/5 group-hover:glow-primary cursor-pointer transition-all duration-300">
+            <Zap className="h-6 w-6 text-foreground group-hover:text-primary transition-colors mb-1" />
+            <span className="text-lg font-bold font-mono text-foreground group-hover:text-primary transition-colors">
+              BENCH
+            </span>
+          </div>
+        </button>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onAdvancedMode}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+          >
+            💬 Skip to Chat
+          </button>
+          <button
+            onClick={onAdvancedMode}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+          >
+            <Settings2 className="h-3 w-3" />
+            Advanced
+          </button>
         </div>
       </div>
     );
@@ -403,7 +461,8 @@ export function QuickStart({
               </>
             ) : (
               <>
-                <span className="text-3xl font-bold font-mono text-foreground group-hover:text-primary transition-colors">
+                <Download className="h-5 w-5 text-foreground group-hover:text-primary transition-colors mb-1" />
+                <span className="text-2xl font-bold font-mono text-foreground group-hover:text-primary transition-colors">
                   GO
                 </span>
               </>
@@ -422,9 +481,14 @@ export function QuickStart({
             <p className="text-[10px] font-mono text-muted-foreground/60">
               {ENGINE_LABEL[engine]}
             </p>
-            <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-              This will download a <span className="text-foreground font-medium">{model.size}</span> AI model to your browser, then run a quick benchmark to test your device's AI performance.
-            </p>
+            <div className="space-y-1.5 mt-2">
+              <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                <span className="text-foreground font-medium">Step 1:</span> Downloads a <span className="text-foreground font-medium">{model.size}</span> AI model to your browser.
+              </p>
+              <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                <span className="text-foreground font-medium">Step 2:</span> Runs a quick benchmark by sending {QUICK_PROMPTS.length} test prompts to measure performance.
+              </p>
+            </div>
           </>
         )}
         {phase === "downloading" && (
