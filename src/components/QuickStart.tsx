@@ -70,6 +70,23 @@ const ENGINE_LABEL: Record<EngineType, string> = {
 // Run all benchmark prompts for a comprehensive stress test
 const QUICK_PROMPTS = BENCHMARK_PROMPTS;
 
+const STATUS_ICON: Record<DiagnosticCheck["status"], React.ReactNode> = {
+  pass: <CheckCircle2 className="h-3 w-3 text-primary" />,
+  warn: <AlertTriangle className="h-3 w-3 text-yellow-400" />,
+  fail: <XCircle className="h-3 w-3 text-destructive" />,
+  unknown: <HelpCircle className="h-3 w-3 text-muted-foreground" />,
+};
+
+function DiagnosticRow({ check }: { check: DiagnosticCheck }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/20 px-2.5 py-1.5 text-[10px] font-mono">
+      {STATUS_ICON[check.status]}
+      <span className="text-muted-foreground flex-1">{check.label}</span>
+      <span className="text-foreground font-medium">{check.value}</span>
+    </div>
+  );
+}
+
 export function QuickStart({
   status,
   statusMessage,
