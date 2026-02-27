@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, Settings2, Loader2, Zap, Timer, Gauge, Download } from "lucide-react";
+import { AlertCircle, Settings2, Loader2, Zap, Timer, Gauge, Download, CheckCircle2, AlertTriangle, XCircle, HelpCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceInfo } from "@/lib/deviceInfo";
+import { runDiagnostics, type DiagnosticReport, type DiagnosticCheck } from "@/lib/diagnostics";
 import type { ModelStatus, BenchmarkResult } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { getBestQuickStartModel } from "@/lib/models";
