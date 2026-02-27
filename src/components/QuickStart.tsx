@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, Settings2, Loader2, Zap, Timer, Gauge, Download } from "lucide-react";
+import { AlertCircle, Settings2, Loader2, Zap, Timer, Gauge, Download, CheckCircle2, AlertTriangle, XCircle, HelpCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceInfo } from "@/lib/deviceInfo";
+import { runDiagnostics, type DiagnosticReport, type DiagnosticCheck } from "@/lib/diagnostics";
 import type { ModelStatus, BenchmarkResult } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { getBestQuickStartModel } from "@/lib/models";
@@ -69,6 +70,23 @@ const ENGINE_LABEL: Record<EngineType, string> = {
 // Run all benchmark prompts for a comprehensive stress test
 const QUICK_PROMPTS = BENCHMARK_PROMPTS;
 
+const STATUS_ICON: Record<DiagnosticCheck["status"], React.ReactNode> = {
+  pass: <CheckCircle2 className="h-3 w-3 text-primary" />,
+  warn: <AlertTriangle className="h-3 w-3 text-yellow-400" />,
+  fail: <XCircle className="h-3 w-3 text-destructive" />,
+  unknown: <HelpCircle className="h-3 w-3 text-muted-foreground" />,
+};
+
+function DiagnosticRow({ check }: { check: DiagnosticCheck }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/20 px-2.5 py-1.5 text-[10px] font-mono">
+      {STATUS_ICON[check.status]}
+      <span className="text-muted-foreground flex-1">{check.label}</span>
+      <span className="text-foreground font-medium">{check.value}</span>
+    </div>
+  );
+}
+
 export function QuickStart({
   status,
   statusMessage,
@@ -89,8 +107,20 @@ export function QuickStart({
   const [phase, setPhase] = useState<Phase>("idle");
   const [benchResults, setBenchResults] = useState<BenchmarkResult[]>([]);
   const [benchProgress, setBenchProgress] = useState(0);
+  const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport | null>(null);
+  const [runningDiagnostics, setRunningDiagnostics] = useState(false);
 
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
+
+  // Run diagnostics on mount when model is known
+  useEffect(() => {
+    if (!model || diagnosticReport) return;
+    setRunningDiagnostics(true);
+    runDiagnostics(model.size).then((report) => {
+      setDiagnosticReport(report);
+      setRunningDiagnostics(false);
+    }).catch(() => setRunningDiagnostics(false));
+  }, [model, diagnosticReport]);
 
   // When model becomes ready after download, pause at ready_to_bench
   useEffect(() => {
@@ -481,6 +511,24 @@ export function QuickStart({
             <p className="text-[10px] font-mono text-muted-foreground/60">
               {ENGINE_LABEL[engine]}
             </p>
+
+            {/* Diagnostic checks */}
+            {runningDiagnostics && (
+              <p className="text-[10px] font-mono text-muted-foreground/60 animate-pulse mt-2">Running diagnostics...</p>
+            )}
+            {diagnosticReport && (
+              <div className="mt-3 w-full space-y-1.5">
+                {diagnosticReport.checks.map((check) => (
+                  <DiagnosticRow key={check.id} check={check} />
+                ))}
+                {diagnosticReport.overall === "fail" && (
+                  <p className="text-[10px] font-mono text-destructive/80 mt-2">
+                    ⚠️ Your device may not handle this model. You can still try.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1.5 mt-2">
               <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
                 <span className="text-foreground font-medium">Step 1:</span> Downloads a <span className="text-foreground font-medium">{model.size}</span> AI model to your browser.
