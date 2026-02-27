@@ -190,8 +190,12 @@ export function QuickStart({
     onLoadModel(model.url, model.name, undefined, model.engine);
   };
 
+  const handleStartBenchmark = () => {
+    setPhase("benchmarking");
+  };
+
   const handleRetry = () => {
-    setPhase("idle");
+    setPhase("ready_to_bench");
     setBenchResults([]);
     setBenchProgress(0);
   };
