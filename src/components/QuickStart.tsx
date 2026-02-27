@@ -92,10 +92,10 @@ export function QuickStart({
 
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
 
-  // When model becomes ready, start benchmark automatically
+  // When model becomes ready after download, pause at ready_to_bench
   useEffect(() => {
     if (status === "ready" && phase === "downloading") {
-      setPhase("benchmarking");
+      setPhase("ready_to_bench");
     }
   }, [status, phase]);
 
