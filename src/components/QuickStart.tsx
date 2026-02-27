@@ -90,8 +90,20 @@ export function QuickStart({
   const [phase, setPhase] = useState<Phase>("idle");
   const [benchResults, setBenchResults] = useState<BenchmarkResult[]>([]);
   const [benchProgress, setBenchProgress] = useState(0);
+  const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport | null>(null);
+  const [runningDiagnostics, setRunningDiagnostics] = useState(false);
 
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
+
+  // Run diagnostics on mount when model is known
+  useEffect(() => {
+    if (!model || diagnosticReport) return;
+    setRunningDiagnostics(true);
+    runDiagnostics(model.size).then((report) => {
+      setDiagnosticReport(report);
+      setRunningDiagnostics(false);
+    }).catch(() => setRunningDiagnostics(false));
+  }, [model, diagnosticReport]);
 
   // When model becomes ready after download, pause at ready_to_bench
   useEffect(() => {
