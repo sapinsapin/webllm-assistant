@@ -10,7 +10,7 @@ import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { getBestQuickStartModel } from "@/lib/models";
 import { BENCHMARK_PROMPTS } from "@/lib/models";
 
-type Phase = "idle" | "downloading" | "benchmarking" | "done";
+type Phase = "idle" | "downloading" | "ready_to_bench" | "benchmarking" | "done";
 
 interface Verdict {
   label: string;
