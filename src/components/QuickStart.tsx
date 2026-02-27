@@ -494,6 +494,24 @@ export function QuickStart({
             <p className="text-[10px] font-mono text-muted-foreground/60">
               {ENGINE_LABEL[engine]}
             </p>
+
+            {/* Diagnostic checks */}
+            {runningDiagnostics && (
+              <p className="text-[10px] font-mono text-muted-foreground/60 animate-pulse mt-2">Running diagnostics...</p>
+            )}
+            {diagnosticReport && (
+              <div className="mt-3 w-full space-y-1.5">
+                {diagnosticReport.checks.map((check) => (
+                  <DiagnosticRow key={check.id} check={check} />
+                ))}
+                {diagnosticReport.overall === "fail" && (
+                  <p className="text-[10px] font-mono text-destructive/80 mt-2">
+                    ⚠️ Your device may not handle this model. You can still try.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1.5 mt-2">
               <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
                 <span className="text-foreground font-medium">Step 1:</span> Downloads a <span className="text-foreground font-medium">{model.size}</span> AI model to your browser.
