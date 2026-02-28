@@ -77,3 +77,20 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 This app registers a service worker (`/model-cache-sw.js`) that caches downloaded model assets (for example `*.bin`, `*.wasm`, `*.json`, `*.litertlm`, `*.task`, etc.) from common model hosts such as Hugging Face and MLC. Once downloaded, these files are reused on subsequent visits so models can load faster and avoid redownloading.
 
 > Note: browser storage/cache partitioning policies are controlled by the browser. Reuse across unrelated sites may vary by browser/version, even when the exact same model URLs are requested.
+
+
+## Cloud-to-browser handoff plugin
+
+The app now includes a WebGPU handoff plugin that enables **smooth cloud → local inference transitions**:
+
+- When `VITE_CLOUD_LLM_ENDPOINT` and `VITE_CLOUD_LLM_MODEL` are configured, chat requests start on the cloud API immediately.
+- In parallel, the selected in-browser model is downloaded asynchronously via WebGPU.
+- Once local loading finishes, inference automatically hands off to the browser model while keeping the full prompt history.
+- The active backend is shown in the chat header (`Cloud API` vs `Local WebGPU`).
+
+Environment variables:
+
+- `VITE_CLOUD_LLM_ENDPOINT` — OpenAI-compatible chat completions endpoint.
+- `VITE_CLOUD_LLM_MODEL` — model id for the cloud endpoint.
+- `VITE_CLOUD_LLM_API_KEY` — optional API key.
+- `VITE_CLOUD_LLM_AUTH_HEADER` — optional header name (defaults to `Authorization`).
