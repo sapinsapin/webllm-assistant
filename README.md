@@ -126,3 +126,44 @@ console.log(answer);
 3. While local is not ready, requests go to cloud provider.
 4. Once local is ready, mode automatically switches to local provider.
 5. Shared history is retained across providers, so handoff is seamless.
+
+## P2P WebRTC-like serving protocol for WebLLM
+
+This repository also includes a lightweight protocol layer for serving local WebLLM inference from one browser peer to another over a **WebRTC DataChannel**.
+
+- Files:
+  - `src/lib/handoff/p2p-llm-protocol.ts`
+  - `src/lib/handoff/p2p-llm-protocol.test.ts`
+- Goal: let one peer expose its local model as a request/stream service while another peer sends chat context and receives token streaming in real-time.
+
+### Protocol message types
+
+- `hello`: initial peer capabilities handshake.
+- `request`: asks serving peer to run completion for a shared message array.
+- `token`: incremental streamed output token.
+- `complete`: final text response for request.
+- `cancel`: client-side cancellation.
+- `error`: request-level or protocol-level failure.
+- `ping` / `pong`: liveness checks.
+
+### Quick usage
+
+```ts
+import { P2PLlmPeer, createRtcDataChannelTransport } from "@/lib/handoff";
+
+// On the serving peer: attach a local provider (for example createLocalEngineProvider(webLlmEngine))
+const serverPeer = new P2PLlmPeer({ role: "server", provider: localProvider });
+serverPeer.attachTransport(createRtcDataChannelTransport(serverDataChannel));
+
+// On the requester peer:
+const clientPeer = new P2PLlmPeer({ role: "client" });
+clientPeer.attachTransport(createRtcDataChannelTransport(clientDataChannel));
+
+const completion = await clientPeer.requestCompletion([{ role: "user", content: "Summarize WebGPU" }], {
+  onToken: (token) => {
+    // token-by-token updates
+  },
+});
+
+console.log(completion);
+```
