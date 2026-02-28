@@ -38,7 +38,7 @@ const Index = () => {
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
   // Show quick start (simple GO page) when not ready and not in advanced mode
-  const showQuickStart = status !== "ready" && !advancedMode && activeTab !== "cloud";
+  const showQuickStart = status !== "ready" && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
