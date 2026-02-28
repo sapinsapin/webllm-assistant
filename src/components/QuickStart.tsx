@@ -56,6 +56,7 @@ interface QuickStartProps {
   onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
   onAdvancedMode: () => void;
   onCloudChat?: () => void;
+  onC2CChat?: () => void;
   onRunBenchmark: (prompt: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunLongContext?: (prompt: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunMultiTurn?: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
@@ -97,6 +98,7 @@ export function QuickStart({
   onLoadModel,
   onAdvancedMode,
   onCloudChat,
+  onC2CChat,
   onRunBenchmark,
   onRunLongContext,
   onRunMultiTurn,
@@ -586,6 +588,14 @@ export function QuickStart({
               className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
             >
               ☁️ Cloud Chat
+            </button>
+          )}
+          {onC2CChat && (
+            <button
+              onClick={onC2CChat}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            >
+              🔄 C2C Mode
             </button>
           )}
           <button

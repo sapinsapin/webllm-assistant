@@ -7,9 +7,10 @@ import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
 import { CloudChat } from "@/components/CloudChat";
-import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud } from "lucide-react";
+import { C2CChat } from "@/components/C2CChat";
+import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft } from "lucide-react";
 
-type Tab = "chat" | "benchmark" | "cloud";
+type Tab = "chat" | "benchmark" | "cloud" | "c2c";
 
 const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
   mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
@@ -37,7 +38,7 @@ const Index = () => {
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
   // Show quick start (simple GO page) when not ready and not in advanced mode
-  const showQuickStart = status !== "ready" && !advancedMode && activeTab !== "cloud";
+  const showQuickStart = status !== "ready" && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -73,6 +74,16 @@ const Index = () => {
                   }`}
                 >
                   <Cloud className="h-3 w-3" /> Cloud
+                </button>
+                <button
+                  onClick={() => setActiveTab("c2c")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "c2c"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <ArrowRightLeft className="h-3 w-3" /> C2C
                 </button>
                 <button
                   onClick={() => setActiveTab("benchmark")}
@@ -113,7 +124,7 @@ const Index = () => {
                 </button>
               </div>
             </>
-          ) : activeTab === "cloud" ? (
+          ) : activeTab === "cloud" || activeTab === "c2c" ? (
             <div className="ml-auto">
               <button
                 onClick={() => setActiveTab("chat")}
@@ -138,6 +149,7 @@ const Index = () => {
             onLoadModel={loadModel}
             onAdvancedMode={() => setAdvancedMode(true)}
             onCloudChat={() => setActiveTab("cloud")}
+            onC2CChat={() => setActiveTab("c2c")}
             onRunBenchmark={runBenchmarkPrompt}
             onRunLongContext={runLongContextBenchmark}
             onRunMultiTurn={runMultiTurnBenchmark}
@@ -145,6 +157,8 @@ const Index = () => {
           />
         ) : activeTab === "cloud" ? (
           <CloudChat />
+        ) : activeTab === "c2c" ? (
+          <C2CChat capabilities={capabilities} activeEngine={activeEngine} />
         ) : status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">
             <ModelLoader
