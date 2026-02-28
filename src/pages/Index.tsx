@@ -19,7 +19,7 @@ const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
 const Index = () => {
   const {
     status, statusMessage, downloadProgress, messages, isGenerating, currentModelName,
-    activeEngine, capabilities,
+    activeEngine, activeBackend, capabilities,
     loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
     runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
@@ -81,6 +81,9 @@ const Index = () => {
                     {engineInfo.icon} {engineInfo.label}
                   </span>
                 )}
+                <span className="rounded-md border border-border bg-secondary/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                  Backend: {activeBackend === "cloud" ? "Cloud API" : "Local WebGPU"}
+                </span>
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
                   {currentModelName}

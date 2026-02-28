@@ -1,12 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   type EngineType,
-  type InferenceEngine,
   type EngineCapability,
   detectCapabilities,
   getBestEngine,
-  createEngine,
 } from "@/lib/inference";
+import { WebGPUHandoffPlugin, cloudConfigFromEnv } from "@/lib/inference/webgpu-handoff-plugin";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "error";
 
@@ -36,8 +35,9 @@ export function useLlmInference() {
   const [currentModelName, setCurrentModelName] = useState("");
   const [activeEngine, setActiveEngine] = useState<EngineType | null>(null);
   const [capabilities, setCapabilities] = useState<EngineCapability[]>([]);
+  const [activeBackend, setActiveBackend] = useState<"cloud" | "local">("local");
 
-  const engineRef = useRef<InferenceEngine | null>(null);
+  const pluginRef = useRef<WebGPUHandoffPlugin>(new WebGPUHandoffPlugin(cloudConfigFromEnv()));
 
   // Detect capabilities on mount
   useEffect(() => {
@@ -56,20 +56,25 @@ export function useLlmInference() {
         setDownloadProgress(0);
         setCurrentModelName(modelName || modelUrl.split("/").pop() || "Unknown");
 
-        // Create engine instance
-        const engine = createEngine(engineType);
-        engineRef.current = engine;
         setActiveEngine(engineType);
+        setActiveBackend("local");
 
-        setStatusMessage(`Starting ${engine.label}...`);
-
-        await engine.load(modelUrl, (pct, msg) => {
+        setStatusMessage("Preparing handoff plugin...");
+        await pluginRef.current.load({
+          modelUrl,
+          engineType,
+          hfToken,
+          onProgress: (pct, msg) => {
           setDownloadProgress(Math.max(pct, 0));
           setStatusMessage(msg);
-        }, hfToken);
+          },
+          onBackendChange: setActiveBackend,
+        });
 
         setStatus("ready");
-        setStatusMessage(`Model loaded via ${engine.label}`);
+        setStatusMessage(pluginRef.current.isCloudEnabled
+          ? "Cloud backend active while WebGPU model preloads in background"
+          : "Local model loaded");
       } catch (err: unknown) {
         setStatus("error");
         const msg = err instanceof Error ? err.message : "Failed to load model";
@@ -82,19 +87,18 @@ export function useLlmInference() {
   );
 
   const unloadModel = useCallback(() => {
-    engineRef.current?.unload();
-    engineRef.current = null;
+    pluginRef.current.unload();
     setStatus("idle");
     setStatusMessage("");
     setMessages([]);
     setCurrentModelName("");
     setDownloadProgress(0);
+    setActiveBackend("local");
   }, []);
 
   const sendMessage = useCallback(
     async (userMessage: string) => {
-      const engine = engineRef.current;
-      if (!engine || isGenerating) return;
+      if (isGenerating) return;
 
       const newMessages: ChatMessage[] = [
         ...messages,
@@ -103,13 +107,11 @@ export function useLlmInference() {
       setMessages(newMessages);
       setIsGenerating(true);
 
-      const prompt = engine.formatPrompt(newMessages);
-
       try {
         let fullResponse = "";
         setMessages([...newMessages, { role: "assistant", content: "" }]);
 
-        await engine.generateStream(prompt, {
+        await pluginRef.current.generateStream(newMessages, {
           onToken: (token) => {
             fullResponse += token;
             setMessages([
@@ -136,13 +138,10 @@ export function useLlmInference() {
 
   const runBenchmarkPrompt = useCallback(
     async (promptText: string, category: string = "general"): Promise<BenchmarkResult | null> => {
-      const engine = engineRef.current;
-      if (!engine) return null;
-
-      const fullPrompt = engine.formatPrompt([{ role: "user", content: promptText }]);
+      const benchmarkMessages: ChatMessage[] = [{ role: "user", content: promptText }];
 
       try {
-        const result = await engine.generateFull(fullPrompt);
+        const result = await pluginRef.current.generateFull(benchmarkMessages);
 
         return {
           modelName: currentModelName,
@@ -166,14 +165,11 @@ export function useLlmInference() {
   /** Run a prompt with prepended context (long context benchmark) */
   const runLongContextBenchmark = useCallback(
     async (promptText: string, context: string, category: string = "long_context"): Promise<BenchmarkResult | null> => {
-      const engine = engineRef.current;
-      if (!engine) return null;
-
       const combinedPrompt = `${context}\n\n${promptText}`;
-      const fullPrompt = engine.formatPrompt([{ role: "user", content: combinedPrompt }]);
+      const benchmarkMessages: ChatMessage[] = [{ role: "user", content: combinedPrompt }];
 
       try {
-        const result = await engine.generateFull(fullPrompt);
+        const result = await pluginRef.current.generateFull(benchmarkMessages);
         return {
           modelName: currentModelName,
           prompt: promptText,
@@ -196,9 +192,6 @@ export function useLlmInference() {
   /** Run a multi-turn conversation and return aggregate result */
   const runMultiTurnBenchmark = useCallback(
     async (turns: string[], category: string = "multi_turn"): Promise<BenchmarkResult | null> => {
-      const engine = engineRef.current;
-      if (!engine) return null;
-
       try {
         const conversation: Array<{ role: "user" | "assistant"; content: string }> = [];
         let totalTokens = 0;
@@ -209,8 +202,7 @@ export function useLlmInference() {
 
         for (let i = 0; i < turns.length; i++) {
           conversation.push({ role: "user", content: turns[i] });
-          const fullPrompt = engine.formatPrompt(conversation);
-          const result = await engine.generateFull(fullPrompt);
+          const result = await pluginRef.current.generateFull(conversation);
 
           conversation.push({ role: "assistant", content: result.response });
           totalTokens += result.tokenCount;
@@ -244,15 +236,12 @@ export function useLlmInference() {
   /** Fire N concurrent requests and return aggregate result */
   const runConcurrentBenchmark = useCallback(
     async (promptText: string, concurrency: number, category: string = "concurrent"): Promise<BenchmarkResult | null> => {
-      const engine = engineRef.current;
-      if (!engine) return null;
-
-      const fullPrompt = engine.formatPrompt([{ role: "user", content: promptText }]);
+      const benchmarkMessages: ChatMessage[] = [{ role: "user", content: promptText }];
 
       try {
         const start = performance.now();
         // Fire all requests concurrently (engine may serialize internally, which is what we're measuring)
-        const promises = Array.from({ length: concurrency }, () => engine.generateFull(fullPrompt));
+        const promises = Array.from({ length: concurrency }, () => pluginRef.current.generateFull(benchmarkMessages));
         const results = await Promise.allSettled(promises);
         const end = performance.now();
 
@@ -294,6 +283,7 @@ export function useLlmInference() {
     isGenerating,
     currentModelName,
     activeEngine,
+    activeBackend,
     capabilities,
     loadModel,
     unloadModel,
