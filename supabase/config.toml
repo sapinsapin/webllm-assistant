@@ -2,3 +2,6 @@ project_id = "gjovfujbfqwouopnupwb"
 
 [functions.get-hf-token]
 verify_jwt = false
+
+[functions.apollo-chat]
+verify_jwt = false
