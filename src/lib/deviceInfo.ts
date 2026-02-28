@@ -9,6 +9,10 @@ export interface DeviceInfo {
   pixelRatio: number;
   userAgent: string;
   timestamp: string;
+  deviceModel: string | null;
+  deviceType: "desktop" | "mobile" | "tablet";
+  country: string | null;
+  city: string | null;
 }
 
 function detectBrowser(): string {
