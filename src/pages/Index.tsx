@@ -84,6 +84,7 @@ const Index = () => {
                   }`}
                 >
                   <ArrowRightLeft className="h-3 w-3" /> C2C
+                </button>
                 <button
                   onClick={() => setActiveTab("benchmark")}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
