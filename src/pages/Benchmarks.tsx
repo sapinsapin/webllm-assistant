@@ -33,6 +33,10 @@ interface BenchmarkRun {
   gpu: string | null;
   gpu_vendor: string | null;
   screen_res: string | null;
+  device_model: string | null;
+  device_type: string | null;
+  country: string | null;
+  city: string | null;
 }
 
 const VERDICT_STYLE: Record<string, { color: string; emoji: string }> = {
