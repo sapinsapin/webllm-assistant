@@ -143,6 +143,8 @@ const Index = () => {
             onRunMultiTurn={runMultiTurnBenchmark}
             onRunConcurrent={runConcurrentBenchmark}
           />
+        ) : activeTab === "cloud" ? (
+          <CloudChat />
         ) : status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">
             <ModelLoader
@@ -181,8 +183,6 @@ const Index = () => {
               </div>
             </div>
           </>
-        ) : activeTab === "cloud" ? (
-          <CloudChat />
         ) : (
           <BenchmarkPanel
             modelName={currentModelName}
