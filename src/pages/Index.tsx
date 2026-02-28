@@ -149,6 +149,7 @@ const Index = () => {
             onLoadModel={loadModel}
             onAdvancedMode={() => setAdvancedMode(true)}
             onCloudChat={() => setActiveTab("cloud")}
+            onC2CChat={() => setActiveTab("c2c")}
             onRunBenchmark={runBenchmarkPrompt}
             onRunLongContext={runLongContextBenchmark}
             onRunMultiTurn={runMultiTurnBenchmark}
