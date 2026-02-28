@@ -76,6 +76,15 @@ const Index = () => {
                   <Cloud className="h-3 w-3" /> Cloud
                 </button>
                 <button
+                  onClick={() => setActiveTab("c2c")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "c2c"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <ArrowRightLeft className="h-3 w-3" /> C2C
+                <button
                   onClick={() => setActiveTab("benchmark")}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
                     activeTab === "benchmark"
