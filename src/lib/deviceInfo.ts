@@ -34,9 +34,49 @@ function detectOS(): string {
   return "Unknown";
 }
 
+function detectDeviceModel(): string | null {
+  const ua = navigator.userAgent;
+  // iPhone
+  const iphone = ua.match(/iPhone\s*([\d,]+)?/);
+  if (iphone) return "iPhone";
+  // iPad
+  if (ua.includes("iPad")) return "iPad";
+  // Android device model: "Build/..." pattern or "; MODEL Build"
+  const android = ua.match(/;\s*([^;)]+?)\s*Build\//);
+  if (android) return android[1].trim();
+  // Mac
+  if (ua.includes("Macintosh")) return "Mac";
+  // Windows
+  if (ua.includes("Windows")) return "Windows PC";
+  // Linux
+  if (ua.includes("Linux") && !ua.includes("Android")) return "Linux PC";
+  return null;
+}
+
+function detectDeviceType(): "desktop" | "mobile" | "tablet" {
+  const ua = navigator.userAgent;
+  if (/iPad|Android(?!.*Mobile)|Tablet/i.test(ua)) return "tablet";
+  if (/iPhone|iPod|Android.*Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return "mobile";
+  return "desktop";
+}
+
+async function fetchGeoLocation(): Promise<{ country: string | null; city: string | null }> {
+  try {
+    const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { country: null, city: null };
+    const data = await res.json();
+    return { country: data.country_name ?? null, city: data.city ?? null };
+  } catch {
+    return { country: null, city: null };
+  }
+}
+
 export async function getDeviceInfo(): Promise<DeviceInfo> {
   let gpu: string | null = null;
   let gpuVendor: string | null = null;
+
+  // Run GPU detection and geo lookup in parallel
+  const geoPromise = fetchGeoLocation();
 
   try {
     const adapter = await (navigator as any).gpu?.requestAdapter();
@@ -46,7 +86,6 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
         gpu = info.device || info.description || null;
         gpuVendor = info.vendor || null;
       }
-      // Fallback: try architecture
       if (!gpu && info?.architecture) {
         gpu = info.architecture;
       }
@@ -54,6 +93,8 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
   } catch {
     // WebGPU not available
   }
+
+  const geo = await geoPromise;
 
   return {
     browser: detectBrowser(),
@@ -66,5 +107,9 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
     pixelRatio: window.devicePixelRatio,
     userAgent: navigator.userAgent,
     timestamp: new Date().toISOString(),
+    deviceModel: detectDeviceModel(),
+    deviceType: detectDeviceType(),
+    country: geo.country,
+    city: geo.city,
   };
 }
