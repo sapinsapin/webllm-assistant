@@ -6,9 +6,10 @@ import { QuickStart } from "@/components/QuickStart";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
-import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History } from "lucide-react";
+import { CloudChat } from "@/components/CloudChat";
+import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud } from "lucide-react";
 
-type Tab = "chat" | "benchmark";
+type Tab = "chat" | "benchmark" | "cloud";
 
 const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
   mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
