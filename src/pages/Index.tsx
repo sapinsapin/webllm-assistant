@@ -137,6 +137,7 @@ const Index = () => {
             capabilities={capabilities}
             onLoadModel={loadModel}
             onAdvancedMode={() => setAdvancedMode(true)}
+            onCloudChat={() => setActiveTab("cloud")}
             onRunBenchmark={runBenchmarkPrompt}
             onRunLongContext={runLongContextBenchmark}
             onRunMultiTurn={runMultiTurnBenchmark}

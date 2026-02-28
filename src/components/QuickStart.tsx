@@ -575,15 +575,25 @@ export function QuickStart({
         )}
       </div>
 
-      {/* Advanced mode link */}
+      {/* Bottom links */}
       {!isActive && (
-        <button
-          onClick={onAdvancedMode}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
-        >
-          <Settings2 className="h-3 w-3" />
-          Advanced
-        </button>
+        <div className="flex items-center gap-3">
+          {onCloudChat && (
+            <button
+              onClick={onCloudChat}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            >
+              ☁️ Cloud Chat
+            </button>
+          )}
+          <button
+            onClick={onAdvancedMode}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+          >
+            <Settings2 className="h-3 w-3" />
+            Advanced
+          </button>
+        </div>
       )}
     </div>
   );
