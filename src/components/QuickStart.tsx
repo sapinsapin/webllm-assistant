@@ -55,6 +55,7 @@ interface QuickStartProps {
   capabilities: EngineCapability[];
   onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
   onAdvancedMode: () => void;
+  onCloudChat?: () => void;
   onRunBenchmark: (prompt: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunLongContext?: (prompt: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunMultiTurn?: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
