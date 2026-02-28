@@ -96,6 +96,7 @@ export function QuickStart({
   capabilities,
   onLoadModel,
   onAdvancedMode,
+  onCloudChat,
   onRunBenchmark,
   onRunLongContext,
   onRunMultiTurn,
