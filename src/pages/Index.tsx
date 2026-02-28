@@ -113,7 +113,16 @@ const Index = () => {
                 </button>
               </div>
             </>
-          )}
+          ) : activeTab === "cloud" ? (
+            <div className="ml-auto">
+              <button
+                onClick={() => setActiveTab("chat")}
+                className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
+              >
+                <RotateCcw className="h-3 w-3" /> Back
+              </button>
+            </div>
+          ) : null}
         </header>
       )}
 
