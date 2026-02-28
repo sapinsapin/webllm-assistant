@@ -198,6 +198,8 @@ export function QuickStart({
             browser: device.browser, os: device.os, cores: device.cores, ram_gb: device.ram,
             gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
             pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
+            device_model: device.deviceModel, device_type: device.deviceType,
+            country: device.country, city: device.city,
           });
         } catch (saveErr) {
           console.error("Failed to save benchmark:", saveErr);
