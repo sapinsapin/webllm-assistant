@@ -19,8 +19,12 @@ export type Database = {
           avg_tps: number
           avg_ttft_ms: number
           browser: string | null
+          city: string | null
           cores: number | null
+          country: string | null
           created_at: string
+          device_model: string | null
+          device_type: string | null
           engine: string
           gpu: string | null
           gpu_vendor: string | null
@@ -38,8 +42,12 @@ export type Database = {
           avg_tps: number
           avg_ttft_ms: number
           browser?: string | null
+          city?: string | null
           cores?: number | null
+          country?: string | null
           created_at?: string
+          device_model?: string | null
+          device_type?: string | null
           engine: string
           gpu?: string | null
           gpu_vendor?: string | null
@@ -57,8 +65,12 @@ export type Database = {
           avg_tps?: number
           avg_ttft_ms?: number
           browser?: string | null
+          city?: string | null
           cores?: number | null
+          country?: string | null
           created_at?: string
+          device_model?: string | null
+          device_type?: string | null
           engine?: string
           gpu?: string | null
           gpu_vendor?: string | null

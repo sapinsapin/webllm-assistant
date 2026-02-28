@@ -33,6 +33,10 @@ interface BenchmarkRun {
   gpu: string | null;
   gpu_vendor: string | null;
   screen_res: string | null;
+  device_model: string | null;
+  device_type: string | null;
+  country: string | null;
+  city: string | null;
 }
 
 const VERDICT_STYLE: Record<string, { color: string; emoji: string }> = {
@@ -179,12 +183,17 @@ function RunCard({ run }: { run: BenchmarkRun }) {
           <div className="space-y-1.5">
             <h4 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider">Device</h4>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-muted-foreground">
+              {run.device_model && <span className="font-semibold text-foreground">{run.device_model}</span>}
+              {run.device_type && <span className="rounded border border-border bg-secondary/30 px-1.5 py-0.5 text-[10px]">{run.device_type}</span>}
               {run.browser && <span className="flex items-center gap-1"><Monitor className="h-3 w-3" /> {run.browser}</span>}
               {run.os && <span>{run.os}</span>}
               {run.cores && <span>{run.cores} cores</span>}
               {run.ram_gb && <span>{run.ram_gb} GB RAM</span>}
               {run.gpu && <span className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {run.gpu}</span>}
               {run.screen_res && <span>{run.screen_res}</span>}
+              {(run.city || run.country) && (
+                <span className="flex items-center gap-1">📍 {[run.city, run.country].filter(Boolean).join(", ")}</span>
+              )}
             </div>
           </div>
         </div>
