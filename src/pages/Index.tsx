@@ -156,6 +156,8 @@ const Index = () => {
           />
         ) : activeTab === "cloud" ? (
           <CloudChat />
+        ) : activeTab === "c2c" ? (
+          <C2CChat capabilities={capabilities} activeEngine={activeEngine} />
         ) : status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">
             <ModelLoader
