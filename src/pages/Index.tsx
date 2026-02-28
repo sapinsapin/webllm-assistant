@@ -37,11 +37,11 @@ const Index = () => {
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
   // Show quick start (simple GO page) when not ready and not in advanced mode
-  const showQuickStart = status !== "ready" && !advancedMode;
+  const showQuickStart = status !== "ready" && !advancedMode && activeTab !== "cloud";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header — hide in quick start mode for cleaner look */}
+      {/* Header — hide in quick start mode for cleaner look, but show in cloud mode */}
       {!showQuickStart && (
         <header className="flex items-center gap-2 border-b border-border px-6 py-3">
           <Cpu className="h-5 w-5 text-primary" />
@@ -50,7 +50,7 @@ const Index = () => {
             <span className="text-foreground"> AI?</span>
           </span>
 
-          {status === "ready" && (
+          {status === "ready" ? (
             <>
               {/* Tabs */}
               <div className="ml-6 flex items-center gap-1 rounded-lg border border-border bg-secondary/30 p-0.5">
@@ -113,7 +113,16 @@ const Index = () => {
                 </button>
               </div>
             </>
-          )}
+          ) : activeTab === "cloud" ? (
+            <div className="ml-auto">
+              <button
+                onClick={() => setActiveTab("chat")}
+                className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
+              >
+                <RotateCcw className="h-3 w-3" /> Back
+              </button>
+            </div>
+          ) : null}
         </header>
       )}
 
@@ -128,6 +137,7 @@ const Index = () => {
             capabilities={capabilities}
             onLoadModel={loadModel}
             onAdvancedMode={() => setAdvancedMode(true)}
+            onCloudChat={() => setActiveTab("cloud")}
             onRunBenchmark={runBenchmarkPrompt}
             onRunLongContext={runLongContextBenchmark}
             onRunMultiTurn={runMultiTurnBenchmark}

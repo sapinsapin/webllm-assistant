@@ -55,6 +55,7 @@ interface QuickStartProps {
   capabilities: EngineCapability[];
   onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
   onAdvancedMode: () => void;
+  onCloudChat?: () => void;
   onRunBenchmark: (prompt: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunLongContext?: (prompt: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunMultiTurn?: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
@@ -95,6 +96,7 @@ export function QuickStart({
   capabilities,
   onLoadModel,
   onAdvancedMode,
+  onCloudChat,
   onRunBenchmark,
   onRunLongContext,
   onRunMultiTurn,
@@ -573,15 +575,25 @@ export function QuickStart({
         )}
       </div>
 
-      {/* Advanced mode link */}
+      {/* Bottom links */}
       {!isActive && (
-        <button
-          onClick={onAdvancedMode}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
-        >
-          <Settings2 className="h-3 w-3" />
-          Advanced
-        </button>
+        <div className="flex items-center gap-3">
+          {onCloudChat && (
+            <button
+              onClick={onCloudChat}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            >
+              ☁️ Cloud Chat
+            </button>
+          )}
+          <button
+            onClick={onAdvancedMode}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+          >
+            <Settings2 className="h-3 w-3" />
+            Advanced
+          </button>
+        </div>
       )}
     </div>
   );
