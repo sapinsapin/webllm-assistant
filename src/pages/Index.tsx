@@ -183,8 +183,6 @@ const Index = () => {
               </div>
             </div>
           </>
-        ) : activeTab === "cloud" ? (
-          <CloudChat />
         ) : (
           <BenchmarkPanel
             modelName={currentModelName}
