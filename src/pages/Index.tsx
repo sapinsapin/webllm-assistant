@@ -42,7 +42,7 @@ const Index = () => {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header — hide in quick start mode for cleaner look, but show in cloud mode */}
-      {(!showQuickStart || activeTab === "cloud") && (
+      {!showQuickStart && (
         <header className="flex items-center gap-2 border-b border-border px-6 py-3">
           <Cpu className="h-5 w-5 text-primary" />
           <span className="font-mono text-sm font-semibold">
