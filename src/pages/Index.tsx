@@ -50,7 +50,7 @@ const Index = () => {
             <span className="text-foreground"> AI?</span>
           </span>
 
-          {status === "ready" && (
+          {status === "ready" ? (
             <>
               {/* Tabs */}
               <div className="ml-6 flex items-center gap-1 rounded-lg border border-border bg-secondary/30 p-0.5">
