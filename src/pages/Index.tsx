@@ -6,9 +6,10 @@ import { QuickStart } from "@/components/QuickStart";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
-import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History } from "lucide-react";
+import { CloudChat } from "@/components/CloudChat";
+import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud } from "lucide-react";
 
-type Tab = "chat" | "benchmark";
+type Tab = "chat" | "benchmark" | "cloud";
 
 const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
   mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
@@ -62,6 +63,16 @@ const Index = () => {
                   }`}
                 >
                   <MessageSquare className="h-3 w-3" /> Chat
+                </button>
+                <button
+                  onClick={() => setActiveTab("cloud")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "cloud"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Cloud className="h-3 w-3" /> Cloud
                 </button>
                 <button
                   onClick={() => setActiveTab("benchmark")}
@@ -160,6 +171,8 @@ const Index = () => {
               </div>
             </div>
           </>
+        ) : activeTab === "cloud" ? (
+          <CloudChat />
         ) : (
           <BenchmarkPanel
             modelName={currentModelName}
