@@ -124,7 +124,7 @@ const Index = () => {
                 </button>
               </div>
             </>
-          ) : activeTab === "cloud" ? (
+          ) : activeTab === "cloud" || activeTab === "c2c" ? (
             <div className="ml-auto">
               <button
                 onClick={() => setActiveTab("chat")}
