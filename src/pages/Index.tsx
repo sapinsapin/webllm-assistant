@@ -65,6 +65,16 @@ const Index = () => {
                   <MessageSquare className="h-3 w-3" /> Chat
                 </button>
                 <button
+                  onClick={() => setActiveTab("cloud")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "cloud"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Cloud className="h-3 w-3" /> Cloud
+                </button>
+                <button
                   onClick={() => setActiveTab("benchmark")}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
                     activeTab === "benchmark"
