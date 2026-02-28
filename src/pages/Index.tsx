@@ -7,6 +7,7 @@ import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
 import { CloudChat } from "@/components/CloudChat";
+import { C2CChat } from "@/components/C2CChat";
 import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft } from "lucide-react";
 
 type Tab = "chat" | "benchmark" | "cloud" | "c2c";
