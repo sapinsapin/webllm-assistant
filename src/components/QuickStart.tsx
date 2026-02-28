@@ -590,6 +590,14 @@ export function QuickStart({
               ☁️ Cloud Chat
             </button>
           )}
+          {onC2CChat && (
+            <button
+              onClick={onC2CChat}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            >
+              🔄 C2C Mode
+            </button>
+          )}
           <button
             onClick={onAdvancedMode}
             className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
