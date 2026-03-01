@@ -126,10 +126,10 @@ export function QuickStart({
     }).catch(() => setRunningDiagnostics(false));
   }, [model, diagnosticReport]);
 
-  // When model becomes ready after download, pause at ready_to_bench
+  // When model becomes ready after download, go straight to chat (skip auto-bench)
   useEffect(() => {
     if (status === "ready" && phase === "downloading") {
-      setPhase("ready_to_bench");
+      setPhase("done");
     }
   }, [status, phase]);
 
