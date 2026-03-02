@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
-import { Cloud, Cpu, Loader2, CheckCircle2, AlertCircle, ArrowDownToLine } from "lucide-react";
+import { C2CBenchmark } from "@/components/C2CBenchmark";
+import { Cloud, Cpu, Loader2, CheckCircle2, AlertCircle, ArrowDownToLine, BarChart3, MessageSquare } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 import type { EngineCapability, EngineType, InferenceEngine } from "@/lib/inference/types";
 import { createEngine } from "@/lib/inference";
@@ -11,6 +12,7 @@ const APOLLO_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apoll
 
 type C2CMode = "cloud" | "local";
 type LocalState = "idle" | "loading" | "ready" | "error";
+type C2CView = "chat" | "benchmark";
 
 interface C2CChatProps {
   capabilities: EngineCapability[];
