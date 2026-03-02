@@ -29,6 +29,7 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
   const [localStatusMsg, setLocalStatusMsg] = useState("");
   const [cloudRequests, setCloudRequests] = useState(0);
   const [localRequests, setLocalRequests] = useState(0);
+  const [view, setView] = useState<C2CView>("chat");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<InferenceEngine | null>(null);
