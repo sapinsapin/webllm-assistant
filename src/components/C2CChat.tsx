@@ -280,43 +280,73 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
             </button>
           </>
         )}
+
+        <div className="mx-1 h-3 w-px bg-border" />
+        <div className="flex items-center gap-0.5 rounded border border-border bg-secondary/30 p-0.5">
+          <button
+            onClick={() => setView("chat")}
+            className={`flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-mono transition-all ${
+              view === "chat"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <MessageSquare className="h-2.5 w-2.5" /> Chat
+          </button>
+          <button
+            onClick={() => setView("benchmark")}
+            className={`flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-mono transition-all ${
+              view === "benchmark"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BarChart3 className="h-2.5 w-2.5" /> Bench
+          </button>
+        </div>
       </div>
 
-      {/* Chat area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin">
-        {messages.length === 0 && (
-          <div className="flex flex-1 flex-col items-center justify-center h-full gap-3">
-            <div className="flex items-center gap-2">
-              <Cloud className="h-6 w-6 text-muted-foreground/30" />
-              <span className="text-muted-foreground/20">→</span>
-              <Cpu className="h-6 w-6 text-muted-foreground/30" />
-            </div>
-            <p className="text-muted-foreground/40 text-sm font-mono text-center max-w-xs">
-              Cloud → Client mode: chat instantly via cloud while your device loads the AI model in the background
-            </p>
-            {localState === "loading" && (
-              <p className="text-[10px] font-mono text-primary/60 animate-pulse">
-                Local model downloading…
-              </p>
+      {view === "benchmark" ? (
+        <C2CBenchmark engineRef={engineRef} localReady={localState === "ready"} />
+      ) : (
+        <>
+          {/* Chat area */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin">
+            {messages.length === 0 && (
+              <div className="flex flex-1 flex-col items-center justify-center h-full gap-3">
+                <div className="flex items-center gap-2">
+                  <Cloud className="h-6 w-6 text-muted-foreground/30" />
+                  <span className="text-muted-foreground/20">→</span>
+                  <Cpu className="h-6 w-6 text-muted-foreground/30" />
+                </div>
+                <p className="text-muted-foreground/40 text-sm font-mono text-center max-w-xs">
+                  Cloud → Client mode: chat instantly via cloud while your device loads the AI model in the background
+                </p>
+                {localState === "loading" && (
+                  <p className="text-[10px] font-mono text-primary/60 animate-pulse">
+                    Local model downloading…
+                  </p>
+                )}
+              </div>
             )}
+            {messages.map((msg, i) => (
+              <ChatMessage key={i} message={msg} />
+            ))}
           </div>
-        )}
-        {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} />
-        ))}
-      </div>
 
-      {error && (
-        <div className="mx-6 mb-2 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <AlertCircle className="h-3 w-3 shrink-0" /> {error}
-        </div>
+          {error && (
+            <div className="mx-6 mb-2 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertCircle className="h-3 w-3 shrink-0" /> {error}
+            </div>
+          )}
+
+          <div className="border-t border-border p-4">
+            <div className="mx-auto max-w-3xl">
+              <ChatInput onSend={sendMessage} disabled={isLoading} />
+            </div>
+          </div>
+        </>
       )}
-
-      <div className="border-t border-border p-4">
-        <div className="mx-auto max-w-3xl">
-          <ChatInput onSend={sendMessage} disabled={isLoading} />
-        </div>
-      </div>
     </div>
   );
 }
