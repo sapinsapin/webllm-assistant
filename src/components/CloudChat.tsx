@@ -149,7 +149,7 @@ export function CloudChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages]);
+  }, [messages, tryCaptureLead]);
 
   if (view === "benchmark") {
     return (
