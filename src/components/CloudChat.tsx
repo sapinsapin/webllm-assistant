@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
-import { Cloud, AlertCircle } from "lucide-react";
+import { CloudBenchmark } from "@/components/CloudBenchmark";
+import { Cloud, AlertCircle, MessageSquare, BarChart3 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 
 const APOLLO_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
 export function CloudChat() {
+  const [view, setView] = useState<"chat" | "benchmark">("chat");
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,8 +111,42 @@ export function CloudChat() {
     }
   }, [messages]);
 
+  if (view === "benchmark") {
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+          <button
+            onClick={() => setView("chat")}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-mono text-muted-foreground hover:bg-secondary transition-colors"
+          >
+            <MessageSquare className="h-3 w-3" /> Chat
+          </button>
+          <button
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-mono bg-secondary text-foreground"
+          >
+            <BarChart3 className="h-3 w-3" /> Bench
+          </button>
+        </div>
+        <CloudBenchmark />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+        <button
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-mono bg-secondary text-foreground"
+        >
+          <MessageSquare className="h-3 w-3" /> Chat
+        </button>
+        <button
+          onClick={() => setView("benchmark")}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-mono text-muted-foreground hover:bg-secondary transition-colors"
+        >
+          <BarChart3 className="h-3 w-3" /> Bench
+        </button>
+      </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin">
         {messages.length === 0 && (
           <div className="flex flex-1 flex-col items-center justify-center h-full gap-3">
