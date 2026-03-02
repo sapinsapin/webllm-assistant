@@ -152,7 +152,7 @@ export function CloudChat() {
           <div className="flex flex-1 flex-col items-center justify-center h-full gap-3">
             <Cloud className="h-8 w-8 text-muted-foreground/30" />
             <p className="text-muted-foreground/40 text-sm font-mono text-center max-w-xs">
-              Cloud chat powered by SapinSapinAI inference bridge
+              Cloud chat powered by SapinSapinAI Sovereign stack
             </p>
           </div>
         )}

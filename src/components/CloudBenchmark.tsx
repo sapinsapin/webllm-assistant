@@ -112,7 +112,7 @@ export function CloudBenchmark() {
         <BarChart3 className="h-4 w-4 text-primary" />
         <span className="text-sm font-mono font-medium">Cloud Benchmark</span>
         <span className="text-[10px] font-mono text-muted-foreground">
-          SapinSapinAI inference latency
+          SapinSapinAI Sovereign stack latency
         </span>
         <div className="ml-auto">
           <button
