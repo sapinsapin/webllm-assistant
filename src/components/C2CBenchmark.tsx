@@ -114,7 +114,7 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
 
   const runAll = useCallback(async () => {
     setRunning(true);
-    const updated = prompts.map((p) => ({ prompt: p, status: "idle" as const }));
+    const updated: BenchmarkRow[] = prompts.map((p) => ({ prompt: p, status: "idle" }));
     setRows([...updated]);
 
     for (let i = 0; i < updated.length; i++) {
