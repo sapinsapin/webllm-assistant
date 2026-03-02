@@ -3,7 +3,7 @@ import { Cloud, Cpu, Play, CheckCircle2, Loader2, BarChart3 } from "lucide-react
 import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkPrompt } from "@/lib/models";
 import type { InferenceEngine } from "@/lib/inference/types";
 
-const APOLLO_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
+const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
 interface RunResult {
   timeMs: number;
@@ -42,7 +42,7 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
 
   const runCloudPrompt = useCallback(async (prompt: string): Promise<RunResult> => {
     const start = performance.now();
-    const resp = await fetch(APOLLO_CHAT_URL, {
+    const resp = await fetch(SAPINSAPINAI_CHAT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

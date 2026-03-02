@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Cloud, Play, CheckCircle2, Loader2, BarChart3 } from "lucide-react";
 import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkPrompt } from "@/lib/models";
 
-const APOLLO_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
+const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
 interface RunResult {
   timeMs: number;
@@ -34,7 +34,7 @@ export function CloudBenchmark() {
 
   const runCloudPrompt = useCallback(async (prompt: string): Promise<RunResult> => {
     const start = performance.now();
-    const resp = await fetch(APOLLO_CHAT_URL, {
+    const resp = await fetch(SAPINSAPINAI_CHAT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -112,7 +112,7 @@ export function CloudBenchmark() {
         <BarChart3 className="h-4 w-4 text-primary" />
         <span className="text-sm font-mono font-medium">Cloud Benchmark</span>
         <span className="text-[10px] font-mono text-muted-foreground">
-          Apollo inference latency
+          SapinSapinAI inference latency
         </span>
         <div className="ml-auto">
           <button

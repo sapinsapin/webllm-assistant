@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are SapinSapinAI, a helpful AI assistant powered by Apollo's inference bridge. You are knowledgeable, concise, and friendly. Format responses with markdown when helpful.`;
+const SYSTEM_PROMPT = `You are SapinSapinAI, a helpful AI assistant powered by SapinSapinAI's inference bridge. You are knowledgeable, concise, and friendly. Format responses with markdown when helpful.`;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -59,7 +59,7 @@ serve(async (req) => {
 
     const apiKey = Deno.env.get("APOLLO_INFERENCE_API_KEY");
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "APOLLO_INFERENCE_API_KEY not configured" }), {
+      return new Response(JSON.stringify({ error: "SAPINSAPINAI_INFERENCE_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -89,8 +89,8 @@ serve(async (req) => {
 
     if (!response.ok) {
       const t = await response.text();
-      console.error("Apollo error:", response.status, t);
-      return new Response(JSON.stringify({ error: `Apollo API error (${response.status})` }), {
+      console.error("SapinSapinAI error:", response.status, t);
+      return new Response(JSON.stringify({ error: `SapinSapinAI API error (${response.status})` }), {
         status: response.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -140,7 +140,7 @@ serve(async (req) => {
       },
     });
   } catch (e) {
-    console.error("apollo-chat error:", e);
+    console.error("sapinsapinai-chat error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -8,7 +8,7 @@ import type { EngineCapability, EngineType, InferenceEngine } from "@/lib/infere
 import { createEngine } from "@/lib/inference";
 import { getBestQuickStartModel } from "@/lib/models";
 
-const APOLLO_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
+const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
 type C2CMode = "cloud" | "local";
 type LocalState = "idle" | "loading" | "ready" | "error";
@@ -85,7 +85,7 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
 
   const sendCloudMessage = useCallback(
     async (input: string, currentMessages: ChatMessageType[]): Promise<string> => {
-      const resp = await fetch(APOLLO_CHAT_URL, {
+      const resp = await fetch(SAPINSAPINAI_CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
