@@ -36,19 +36,45 @@ function getQuota(clientId: string): QuotaBucket {
   return current;
 }
 
+const MAX_MESSAGES = 50;
+const MAX_MESSAGE_LENGTH = 4000;
+const VALID_ROLES = new Set(["user", "assistant"]);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const { messages } = await req.json();
-    if (!Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: "messages array required" }), {
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
+      return new Response(JSON.stringify({ error: `Messages array must contain 1-${MAX_MESSAGES} messages` }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const clientId = req.headers.get("x-client-id") ?? "anonymous";
+    // Validate each message structure
+    for (const msg of messages) {
+      if (!msg.role || typeof msg.content !== "string") {
+        return new Response(JSON.stringify({ error: "Each message must have a valid role and string content" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!VALID_ROLES.has(msg.role)) {
+        return new Response(JSON.stringify({ error: "Invalid message role" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (msg.content.length > MAX_MESSAGE_LENGTH) {
+        return new Response(JSON.stringify({ error: `Message content exceeds ${MAX_MESSAGE_LENGTH} characters` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Use connecting IP for rate limiting (not spoofable client header)
+    const clientId = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? req.headers.get("cf-connecting-ip")
+      ?? "unknown";
     const quota = getQuota(clientId);
     const inputTokens = messages.reduce(
       (sum: number, m: { content?: string }) => sum + estimateTokens(m.content ?? ""),
