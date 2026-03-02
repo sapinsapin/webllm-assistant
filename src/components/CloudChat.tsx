@@ -5,7 +5,7 @@ import { CloudBenchmark } from "@/components/CloudBenchmark";
 import { Cloud, AlertCircle, MessageSquare, BarChart3 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 
-const APOLLO_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
+const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
 export function CloudChat() {
   const [view, setView] = useState<"chat" | "benchmark">("chat");
@@ -28,7 +28,7 @@ export function CloudChat() {
     setIsLoading(true);
 
     try {
-      const resp = await fetch(APOLLO_CHAT_URL, {
+      const resp = await fetch(SAPINSAPINAI_CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -152,7 +152,7 @@ export function CloudChat() {
           <div className="flex flex-1 flex-col items-center justify-center h-full gap-3">
             <Cloud className="h-8 w-8 text-muted-foreground/30" />
             <p className="text-muted-foreground/40 text-sm font-mono text-center max-w-xs">
-              Cloud chat powered by Apollo / SapinSapinAI inference bridge
+              Cloud chat powered by SapinSapinAI inference bridge
             </p>
           </div>
         )}
