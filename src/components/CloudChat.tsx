@@ -4,8 +4,12 @@ import { ChatInput } from "@/components/ChatInput";
 import { CloudBenchmark } from "@/components/CloudBenchmark";
 import { Cloud, AlertCircle, MessageSquare, BarChart3 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
+import { supabase } from "@/integrations/supabase/client";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
+
+// Simple email regex for detection
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
 export function CloudChat() {
   const [view, setView] = useState<"chat" | "benchmark">("chat");
@@ -13,6 +17,11 @@ export function CloudChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const onboardingRef = useRef<{ name: string | null; email: string | null; saved: boolean }>({
+    name: null,
+    email: null,
+    saved: false,
+  });
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -20,12 +29,43 @@ export function CloudChat() {
     }
   }, [messages]);
 
+  // Track onboarding: 1st user msg = name, 2nd user msg = email response
+  const tryCaptureLead = useCallback((allMessages: ChatMessageType[]) => {
+    if (onboardingRef.current.saved) return;
+    const userMessages = allMessages.filter((m) => m.role === "user");
+
+    // First user message is their name
+    if (userMessages.length >= 1 && !onboardingRef.current.name) {
+      onboardingRef.current.name = userMessages[0].content.trim();
+    }
+
+    // Second user message is their email response
+    if (userMessages.length >= 2 && !onboardingRef.current.email) {
+      const emailMsg = userMessages[1].content;
+      const match = emailMsg.match(EMAIL_RE);
+      onboardingRef.current.email = match ? match[0] : null;
+
+      // Save lead after second response regardless
+      const { name, email } = onboardingRef.current;
+      if (name) {
+        onboardingRef.current.saved = true;
+        supabase
+          .from("leads")
+          .insert({ name, email, source: "cloud_chat" })
+          .then(({ error }) => {
+            if (error) console.error("Failed to save lead:", error);
+          });
+      }
+    }
+  }, []);
+
   const sendMessage = useCallback(async (input: string) => {
     setError(null);
     const userMsg: ChatMessageType = { role: "user", content: input };
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
     setIsLoading(true);
+    tryCaptureLead(updatedMessages);
 
     try {
       const resp = await fetch(SAPINSAPINAI_CHAT_URL, {
@@ -109,7 +149,7 @@ export function CloudChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages]);
+  }, [messages, tryCaptureLead]);
 
   if (view === "benchmark") {
     return (
