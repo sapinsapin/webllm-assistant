@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
-import { Cloud, AlertCircle } from "lucide-react";
+import { CloudBenchmark } from "@/components/CloudBenchmark";
+import { Cloud, AlertCircle, MessageSquare, BarChart3 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 
 const APOLLO_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
