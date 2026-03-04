@@ -28,6 +28,7 @@ const Index = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [quickStartDismissed, setQuickStartDismissed] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -37,8 +38,8 @@ const Index = () => {
 
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
-  // Show quick start (simple GO page) when not ready and not in advanced mode
-  const showQuickStart = status !== "ready" && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
+  // Show quick start when user hasn't explicitly dismissed it
+  const showQuickStart = !quickStartDismissed && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
