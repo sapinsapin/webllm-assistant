@@ -1,16 +1,5 @@
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
-import { supabase } from "@/integrations/supabase/client";
-
-async function fetchHfToken(): Promise<string> {
-  try {
-    const { data, error } = await supabase.functions.invoke("get-hf-token");
-    if (error) throw error;
-    return data?.token || "";
-  } catch {
-    return "";
-  }
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -23,11 +12,24 @@ async function downloadWithProgress(
   hfToken: string | null,
   onProgress: (pct: number, msg: string) => void
 ): Promise<Uint8Array> {
-  const token = hfToken || await fetchHfToken();
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  let response: Response;
 
-  const response = await fetch(url, { headers });
+  if (hfToken) {
+    // User provided their own token — download directly
+    const headers: Record<string, string> = { Authorization: `Bearer ${hfToken}` };
+    response = await fetch(url, { headers });
+  } else {
+    // Proxy through edge function so the server-side HF_TOKEN stays secret
+    const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-hf-token`;
+    response = await fetch(proxyUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ url }),
+    });
+  }
 
   if (!response.ok) {
     if (response.status === 401) {
