@@ -14,12 +14,10 @@ async function downloadWithProgress(
 ): Promise<Uint8Array> {
   let response: Response;
 
-  if (hfToken) {
-    // User provided their own token — download directly
-    const headers: Record<string, string> = { Authorization: `Bearer ${hfToken}` };
-    response = await fetch(url, { headers });
-  } else {
-    // Proxy through edge function so the server-side HF_TOKEN stays secret
+  const useProxy = import.meta.env.VITE_HF_PROXY_ENABLED === "true";
+
+  if (useProxy && !hfToken) {
+    // Feature-flagged: proxy through edge function so the server-side HF_TOKEN stays secret
     const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-hf-token`;
     response = await fetch(proxyUrl, {
       method: "POST",
@@ -29,6 +27,11 @@ async function downloadWithProgress(
       },
       body: JSON.stringify({ url }),
     });
+  } else {
+    // Direct download (default) — use user token if provided
+    const headers: Record<string, string> = {};
+    if (hfToken) headers.Authorization = `Bearer ${hfToken}`;
+    response = await fetch(url, { headers });
   }
 
   if (!response.ok) {
