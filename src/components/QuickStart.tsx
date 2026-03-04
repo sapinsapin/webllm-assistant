@@ -492,6 +492,46 @@ export function QuickStart({
         </div>
       )}
 
+      {/* Prior crash detected banner */}
+      {crashRecord && !crashDismissed && phase === "idle" && (
+        <div className="w-full max-w-sm rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-2">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-xs font-mono font-semibold text-foreground">
+                Unfinished model load detected
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                It looks like a previous attempt to load <span className="text-foreground font-medium">{crashRecord.model_name}</span> on this device didn't complete.
+                Did it crash or freeze?
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 font-mono">
+                {new Date(crashRecord.created_at).toLocaleString()}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => setCrashDismissed(true)}
+              className="rounded-md border border-border bg-secondary/50 px-3 py-1.5 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Dismiss
+            </button>
+            <button
+              onClick={async () => {
+                // Delete the stale record and dismiss
+                await supabase.from("benchmark_runs").delete().eq("id", crashRecord.id);
+                setCrashRecord(null);
+                setCrashDismissed(true);
+              }}
+              className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-[10px] font-mono text-destructive hover:bg-destructive/20 transition-colors"
+            >
+              Yes, it crashed — clear it
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* GO button */}
       {!noEngineAvailable && (
         <button
