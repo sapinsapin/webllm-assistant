@@ -21,24 +21,6 @@ export const PRESET_MODELS: ModelPreset[] = [
     gated: true,
     engine: "mediapipe",
   },
-  {
-    id: "gemma-3n-e2b",
-    name: "Gemma 3n E2B",
-    size: "~1.5GB",
-    url: "https://huggingface.co/google/gemma-3n-E2B-it-litert-lm/resolve/main/gemma-3n-E2B-it-int4-Web.litertlm",
-    description: "Small model with good quality-to-size ratio.",
-    gated: true,
-    engine: "mediapipe",
-  },
-  {
-    id: "gemma-3n-e4b",
-    name: "Gemma 3n E4B",
-    size: "~3GB",
-    url: "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4-Web.litertlm",
-    description: "Larger model, better quality but slower to load.",
-    gated: true,
-    engine: "mediapipe",
-  },
 
   // WebLLM models (WebGPU required, different model format)
   {
