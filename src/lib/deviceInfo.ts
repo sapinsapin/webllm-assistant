@@ -34,21 +34,50 @@ function detectOS(): string {
   return "Unknown";
 }
 
-function detectDeviceModel(): string | null {
+// iPhone model fingerprinting via screen dimensions + pixel ratio
+function detectIPhoneModel(): string {
+  const w = Math.min(screen.width, screen.height);
+  const h = Math.max(screen.width, screen.height);
+  const r = window.devicePixelRatio;
+  const key = `${w}x${h}@${r}`;
+  const MAP: Record<string, string> = {
+    "320x568@2": "iPhone SE (1st gen)/5s",
+    "375x667@2": "iPhone 6/7/8/SE (2nd/3rd)",
+    "414x736@3": "iPhone 6+/7+/8+",
+    "375x812@3": "iPhone X/XS/11 Pro/12 mini/13 mini",
+    "414x896@2": "iPhone XR/11",
+    "414x896@3": "iPhone XS Max/11 Pro Max",
+    "390x844@3": "iPhone 12/13/14",
+    "428x926@3": "iPhone 12/13 Pro Max/14 Plus",
+    "393x852@3": "iPhone 14 Pro/15/15 Pro",
+    "430x932@3": "iPhone 14 Pro Max/15 Plus/15 Pro Max",
+    "402x874@3": "iPhone 16/16 Pro",
+    "440x956@3": "iPhone 16 Plus/16 Pro Max",
+  };
+  return MAP[key] || "iPhone";
+}
+
+function detectDeviceModel(gpu: string | null): string | null {
   const ua = navigator.userAgent;
-  // iPhone
-  const iphone = ua.match(/iPhone\s*([\d,]+)?/);
-  if (iphone) return "iPhone";
-  // iPad
+  if (ua.includes("iPhone")) return detectIPhoneModel();
   if (ua.includes("iPad")) return "iPad";
-  // Android device model: "Build/..." pattern or "; MODEL Build"
+  if (ua.includes("Macintosh") && navigator.maxTouchPoints > 1) return "iPad";
   const android = ua.match(/;\s*([^;)]+?)\s*Build\//);
   if (android) return android[1].trim();
-  // Mac
-  if (ua.includes("Macintosh")) return "Mac";
-  // Windows
-  if (ua.includes("Windows")) return "Windows PC";
-  // Linux
+  if (ua.includes("Macintosh")) {
+    if (gpu) {
+      const g = gpu.toLowerCase();
+      if (g.includes("m4")) return "Mac (Apple M4)";
+      if (g.includes("m3")) return "Mac (Apple M3)";
+      if (g.includes("m2")) return "Mac (Apple M2)";
+      if (g.includes("m1")) return "Mac (Apple M1)";
+    }
+    return "Mac";
+  }
+  if (ua.includes("Windows")) {
+    if (gpu) return `Windows PC (${gpu})`;
+    return "Windows PC";
+  }
   if (ua.includes("Linux") && !ua.includes("Android")) return "Linux PC";
   return null;
 }
