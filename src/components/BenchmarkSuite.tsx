@@ -188,7 +188,7 @@ export function BenchmarkSuite({ onComplete, externalHook }: BenchmarkSuiteProps
         try {
           const device = await getDeviceInfo();
           const { error } = await supabase.from("benchmark_runs").insert({
-            model_name: allResults[0]?.modelName || "Unknown",
+            model_name: externalModelName || allResults[0]?.modelName || "Unknown",
             engine,
             avg_tps: avgTps,
             avg_ttft_ms: avgTtft,
@@ -393,9 +393,9 @@ export function BenchmarkSuite({ onComplete, externalHook }: BenchmarkSuiteProps
       </div>
 
       {/* Model info footer */}
-      {model && phase === "idle" && !noEngine && (
+      {(model || hasExternal) && phase === "idle" && !noEngine && (
         <div className="border-t border-border px-4 py-2.5 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-          <span>{model.name} · {model.size}</span>
+          <span>{hasExternal ? externalModelName : `${model!.name} · ${model!.size}`}</span>
           <span>{engine === "mediapipe" ? "MediaPipe · WebGPU" : engine === "webllm" ? "WebLLM · WebGPU" : "Transformers.js · WASM"}</span>
         </div>
       )}
