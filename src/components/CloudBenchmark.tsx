@@ -1,6 +1,9 @@
 import { useState, useCallback } from "react";
 import { Cloud, Play, CheckCircle2, Loader2, BarChart3 } from "lucide-react";
 import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkPrompt } from "@/lib/models";
+import { supabase } from "@/integrations/supabase/client";
+import { getDeviceInfo } from "@/lib/deviceInfo";
+import { toast } from "sonner";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
@@ -95,6 +98,51 @@ export function CloudBenchmark() {
       updated[i] = row;
       setRows([...updated]);
     }
+    // Persist results to Supabase
+    const finishedRows = updated.filter((r) => r.status === "done" && r.result);
+    if (finishedRows.length > 0) {
+      try {
+        const device = await getDeviceInfo();
+        const totalTps = finishedRows.reduce((s, r) => s + (r.result!.tps), 0) / finishedRows.length;
+        const totalLatency = finishedRows.reduce((s, r) => s + (r.result!.timeMs), 0) / finishedRows.length;
+
+        const results = finishedRows.map((r) => ({
+          prompt: r.prompt.label,
+          category: r.prompt.category,
+          tokensGenerated: r.result!.tokensEstimate,
+          timeMs: r.result!.timeMs,
+          tokensPerSecond: r.result!.tps,
+          ttftMs: r.result!.timeMs,
+          tpotMs: r.result!.timeMs / r.result!.tokensEstimate,
+        }));
+
+        await supabase.from("benchmark_runs").insert({
+          model_name: "gpt-oss-20b-balitanlp-cpt",
+          engine: "cloud",
+          avg_tps: totalTps,
+          avg_ttft_ms: totalLatency,
+          verdict: totalTps >= 20 ? "Great" : totalTps >= 10 ? "Passable" : "Slow",
+          results,
+          browser: device.browser,
+          os: device.os,
+          cores: device.cores,
+          ram_gb: device.ram,
+          gpu: device.gpu,
+          gpu_vendor: device.gpuVendor,
+          screen_res: device.screenRes,
+          pixel_ratio: device.pixelRatio,
+          user_agent: device.userAgent,
+          device_model: device.deviceModel,
+          device_type: device.deviceType,
+          country: device.country,
+          city: device.city,
+        });
+        toast.success("Cloud benchmark saved!");
+      } catch (err) {
+        console.error("Failed to persist cloud benchmark:", err);
+      }
+    }
+
     setRunning(false);
   }, [prompts, runCloudPrompt]);
 
