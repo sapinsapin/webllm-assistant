@@ -67,18 +67,48 @@ function getVerdict(avgTps: number) {
 
 interface BenchmarkSuiteProps {
   onComplete?: () => void;
+  /** If provided, reuse an already-loaded model instead of downloading a new one */
+  externalHook?: {
+    status: string;
+    statusMessage: string;
+    downloadProgress: number;
+    activeEngine: string | null;
+    currentModelName: string;
+    runBenchmarkPrompt: (prompt: string, category?: string) => Promise<BenchmarkResult | null>;
+    runLongContextBenchmark: (prompt: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
+    runMultiTurnBenchmark: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
+    runConcurrentBenchmark: (prompt: string, concurrency: number, category?: string) => Promise<BenchmarkResult | null>;
+  };
 }
 
 const totalSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
 
-export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
+export function BenchmarkSuite({ onComplete, externalHook }: BenchmarkSuiteProps) {
+  const internalHook = useLlmInference();
+
+  // Use external (already-loaded) model if provided, otherwise internal
+  const hasExternal = !!externalHook && externalHook.status === "ready";
   const {
     status, statusMessage, downloadProgress, activeEngine, capabilities,
     loadModel, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
-  } = useLlmInference();
+  } = hasExternal
+    ? {
+        status: externalHook!.status as any,
+        statusMessage: externalHook!.statusMessage,
+        downloadProgress: externalHook!.downloadProgress,
+        activeEngine: externalHook!.activeEngine,
+        capabilities: internalHook.capabilities,
+        loadModel: internalHook.loadModel,
+        runBenchmarkPrompt: externalHook!.runBenchmarkPrompt,
+        runLongContextBenchmark: externalHook!.runLongContextBenchmark,
+        runMultiTurnBenchmark: externalHook!.runMultiTurnBenchmark,
+        runConcurrentBenchmark: externalHook!.runConcurrentBenchmark,
+      }
+    : internalHook;
 
   const model = getBestQuickStartModel(capabilities);
   const engine = model?.engine || activeEngine || "onnx";
+  const externalModelName = hasExternal ? externalHook!.currentModelName : null;
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [aggregated, setAggregated] = useState<AggregatedResult[]>([]);
@@ -193,6 +223,13 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   }, [phase, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark, engine, onComplete]);
 
   const handleRun = () => {
+    if (hasExternal) {
+      // Model already loaded — skip download, go straight to benchmarking
+      setAggregated([]);
+      setProgress(0);
+      setPhase("benchmarking");
+      return;
+    }
     if (!model || noEngine) return;
     setPhase("downloading");
     setAggregated([]);

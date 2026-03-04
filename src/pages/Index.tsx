@@ -94,7 +94,7 @@ const Index = () => {
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <BarChart3 className="h-3 w-3" /> Benchmark
+                  <BarChart3 className="h-3 w-3" /> QuickBench
                 </button>
               </div>
 
