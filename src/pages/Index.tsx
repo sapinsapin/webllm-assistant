@@ -10,7 +10,7 @@ import { CloudChat } from "@/components/CloudChat";
 import { C2CChat } from "@/components/C2CChat";
 import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft } from "lucide-react";
 
-type Tab = "chat" | "benchmark" | "cloud" | "c2c";
+type Tab = "chat" | "benchmark" | "cloud" | "cloud-bench" | "c2c";
 
 const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
   mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
@@ -151,6 +151,7 @@ const Index = () => {
             onLoadModel={loadModel}
             onAdvancedMode={() => { setAdvancedMode(true); setQuickStartDismissed(true); }}
             onCloudChat={() => setActiveTab("cloud")}
+            onCloudBenchmark={() => setActiveTab("cloud-bench")}
             onC2CChat={() => setActiveTab("c2c")}
             onRunBenchmark={runBenchmarkPrompt}
             onRunLongContext={runLongContextBenchmark}
@@ -158,7 +159,9 @@ const Index = () => {
             onRunConcurrent={runConcurrentBenchmark}
           />
         ) : activeTab === "cloud" ? (
-          <CloudChat />
+          <CloudChat initialView="chat" />
+        ) : activeTab === "cloud-bench" ? (
+          <CloudChat initialView="benchmark" />
         ) : activeTab === "c2c" ? (
           <C2CChat capabilities={capabilities} activeEngine={activeEngine} />
         ) : status !== "ready" ? (
