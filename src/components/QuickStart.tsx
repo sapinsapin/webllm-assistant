@@ -263,9 +263,39 @@ export function QuickStart({
     return () => { cancelled = true; };
   }, [phase, onRunBenchmark]);
 
-  const handleGo = () => {
+  const handleGo = async () => {
     if (!model || noEngineAvailable) return;
     setPhase("downloading");
+
+    // Log attempt immediately — if the page crashes, this row stays as "Did not finish"
+    try {
+      const deviceInfo = await getDeviceInfo();
+      const { data } = await supabase.from("benchmark_runs").insert({
+        model_name: model.name,
+        engine: engine,
+        avg_tps: 0,
+        avg_ttft_ms: 0,
+        verdict: "Did not finish",
+        results: [],
+        browser: deviceInfo.browser,
+        os: deviceInfo.os,
+        cores: deviceInfo.cores,
+        ram_gb: deviceInfo.ram,
+        gpu: deviceInfo.gpu,
+        gpu_vendor: deviceInfo.gpuVendor,
+        screen_res: deviceInfo.screenRes,
+        pixel_ratio: deviceInfo.pixelRatio,
+        user_agent: deviceInfo.userAgent,
+        device_model: deviceInfo.deviceModel,
+        device_type: deviceInfo.deviceType,
+        country: deviceInfo.country,
+        city: deviceInfo.city,
+      }).select("id").single();
+      if (data?.id) setLoadAttemptId(data.id);
+    } catch (e) {
+      console.error("Failed to log load attempt:", e);
+    }
+
     onLoadModel(model.url, model.name, undefined, model.engine);
   };
 
