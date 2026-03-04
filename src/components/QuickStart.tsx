@@ -114,6 +114,7 @@ export function QuickStart({
   const [benchProgress, setBenchProgress] = useState(0);
   const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport | null>(null);
   const [runningDiagnostics, setRunningDiagnostics] = useState(false);
+  const [loadAttemptId, setLoadAttemptId] = useState<string | null>(null);
 
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
 
