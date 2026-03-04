@@ -11,8 +11,8 @@ const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1
 // Simple email regex for detection
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
-export function CloudChat({ initialView = "chat" }: { initialView?: "chat" | "benchmark" }) {
-  const [view, setView] = useState<"chat" | "benchmark">(initialView);
+export function CloudChat() {
+  const [view, setView] = useState<"chat" | "benchmark">("chat");
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
