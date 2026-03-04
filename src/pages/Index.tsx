@@ -28,6 +28,7 @@ const Index = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [quickStartDismissed, setQuickStartDismissed] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -37,8 +38,8 @@ const Index = () => {
 
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
-  // Show quick start (simple GO page) when not ready and not in advanced mode
-  const showQuickStart = status !== "ready" && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
+  // Show quick start when user hasn't explicitly dismissed it
+  const showQuickStart = !quickStartDismissed && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -117,6 +118,7 @@ const Index = () => {
                   onClick={() => {
                     unloadModel();
                     setAdvancedMode(false);
+                    setQuickStartDismissed(false);
                   }}
                   className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
                 >
@@ -147,7 +149,7 @@ const Index = () => {
             activeEngine={activeEngine}
             capabilities={capabilities}
             onLoadModel={loadModel}
-            onAdvancedMode={() => setAdvancedMode(true)}
+            onAdvancedMode={() => { setAdvancedMode(true); setQuickStartDismissed(true); }}
             onCloudChat={() => setActiveTab("cloud")}
             onC2CChat={() => setActiveTab("c2c")}
             onRunBenchmark={runBenchmarkPrompt}
