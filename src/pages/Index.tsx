@@ -5,7 +5,7 @@ import { ModelLoader } from "@/components/ModelLoader";
 import { QuickStart } from "@/components/QuickStart";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
-import { BenchmarkPanel } from "@/components/BenchmarkPanel";
+import { BenchmarkSuite } from "@/components/BenchmarkSuite";
 import { CloudChat } from "@/components/CloudChat";
 import { C2CChat } from "@/components/C2CChat";
 import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft } from "lucide-react";
@@ -94,7 +94,7 @@ const Index = () => {
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <BarChart3 className="h-3 w-3" /> Benchmark
+                  <BarChart3 className="h-3 w-3" /> QuickBench
                 </button>
               </div>
 
@@ -200,10 +200,23 @@ const Index = () => {
             </div>
           </>
         ) : (
-          <BenchmarkPanel
-            modelName={currentModelName}
-            onRunPrompt={runBenchmarkPrompt}
-          />
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="mx-auto max-w-4xl">
+              <BenchmarkSuite
+                externalHook={{
+                  status,
+                  statusMessage,
+                  downloadProgress,
+                  activeEngine,
+                  currentModelName,
+                  runBenchmarkPrompt,
+                  runLongContextBenchmark,
+                  runMultiTurnBenchmark,
+                  runConcurrentBenchmark,
+                }}
+              />
+            </div>
+          </div>
         )}
       </main>
     </div>
