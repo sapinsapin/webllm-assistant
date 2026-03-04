@@ -115,8 +115,36 @@ export function QuickStart({
   const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport | null>(null);
   const [runningDiagnostics, setRunningDiagnostics] = useState(false);
   const [loadAttemptId, setLoadAttemptId] = useState<string | null>(null);
+  const [crashRecord, setCrashRecord] = useState<{ id: string; model_name: string; created_at: string } | null>(null);
+  const [crashDismissed, setCrashDismissed] = useState(false);
 
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
+
+  // Check for prior crash on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const device = await getDeviceInfo();
+        // Match by user_agent + cores + screen_res as a fingerprint
+        const { data } = await supabase
+          .from("benchmark_runs")
+          .select("id, model_name, created_at")
+          .eq("verdict", "Did not finish")
+          .eq("user_agent", device.userAgent)
+          .eq("cores", device.cores)
+          .eq("screen_res", device.screenRes)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (!cancelled && data && data.length > 0) {
+          setCrashRecord(data[0]);
+        }
+      } catch (e) {
+        console.warn("Crash detection check failed:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Run diagnostics on mount when model is known
   useEffect(() => {
