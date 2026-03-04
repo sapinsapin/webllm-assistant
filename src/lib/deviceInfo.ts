@@ -136,7 +136,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
     pixelRatio: window.devicePixelRatio,
     userAgent: navigator.userAgent,
     timestamp: new Date().toISOString(),
-    deviceModel: detectDeviceModel(),
+    deviceModel: detectDeviceModel(gpu),
     deviceType: detectDeviceType(),
     country: geo.country,
     city: geo.city,
