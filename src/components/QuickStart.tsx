@@ -115,36 +115,8 @@ export function QuickStart({
   const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport | null>(null);
   const [runningDiagnostics, setRunningDiagnostics] = useState(false);
   const [loadAttemptId, setLoadAttemptId] = useState<string | null>(null);
-  const [crashRecord, setCrashRecord] = useState<{ id: string; model_name: string; created_at: string } | null>(null);
-  const [crashDismissed, setCrashDismissed] = useState(false);
 
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
-
-  // Check for prior crash on mount
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const device = await getDeviceInfo();
-        // Match by user_agent + cores + screen_res as a fingerprint
-        const { data } = await supabase
-          .from("benchmark_runs")
-          .select("id, model_name, created_at")
-          .eq("verdict", "Did not finish")
-          .eq("user_agent", device.userAgent)
-          .eq("cores", device.cores)
-          .eq("screen_res", device.screenRes)
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (!cancelled && data && data.length > 0) {
-          setCrashRecord(data[0]);
-        }
-      } catch (e) {
-        console.warn("Crash detection check failed:", e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   // Run diagnostics on mount when model is known
   useEffect(() => {
@@ -489,46 +461,6 @@ export function QuickStart({
           <p className="text-sm text-muted-foreground">
             Your browser doesn't support WebGPU or WASM for AI inference. Try Chrome, Edge, or a desktop browser.
           </p>
-        </div>
-      )}
-
-      {/* Prior crash detected banner */}
-      {crashRecord && !crashDismissed && phase === "idle" && (
-        <div className="w-full max-w-sm rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-2">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-            <div className="space-y-1">
-              <p className="text-xs font-mono font-semibold text-foreground">
-                Unfinished model load detected
-              </p>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                It looks like a previous attempt to load <span className="text-foreground font-medium">{crashRecord.model_name}</span> on this device didn't complete.
-                Did it crash or freeze?
-              </p>
-              <p className="text-[10px] text-muted-foreground/60 font-mono">
-                {new Date(crashRecord.created_at).toLocaleString()}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={() => setCrashDismissed(true)}
-              className="rounded-md border border-border bg-secondary/50 px-3 py-1.5 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Dismiss
-            </button>
-            <button
-              onClick={async () => {
-                // Mark as confirmed crash — keep as permanent record
-                await supabase.from("benchmark_runs").update({ verdict: "Crashed" }).eq("id", crashRecord.id);
-                setCrashRecord(null);
-                setCrashDismissed(true);
-              }}
-              className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-[10px] font-mono text-destructive hover:bg-destructive/20 transition-colors"
-            >
-              Yes, it crashed — clear it
-            </button>
-          </div>
         </div>
       )}
 

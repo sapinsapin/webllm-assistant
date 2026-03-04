@@ -28,7 +28,6 @@ const VERDICT_STYLE: Record<string, string> = {
   Slow: "text-orange-400 bg-orange-400/10 border-orange-400/20",
   "Not Viable": "text-red-400 bg-red-400/10 border-red-400/20",
   "Did not finish": "text-muted-foreground bg-secondary/30 border-border",
-  Crashed: "text-red-400 bg-red-400/10 border-red-400/20",
   "Yes, you can AI!": "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
 };
 
@@ -37,8 +36,7 @@ const VERDICT_EMOJI: Record<string, string> = {
   Passable: "👍",
   Slow: "🐢",
   "Not Viable": "❌",
-  "Did not finish": "⏳",
-  Crashed: "💥",
+  "Did not finish": "💥",
   "Yes, you can AI!": "🚀",
 };
 
