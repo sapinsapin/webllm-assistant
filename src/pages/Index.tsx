@@ -39,7 +39,7 @@ const Index = () => {
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
   // Show quick start when user hasn't explicitly dismissed it
-  const showQuickStart = !quickStartDismissed && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
+  const showQuickStart = !quickStartDismissed && !advancedMode && activeTab !== "cloud" && activeTab !== "cloud-bench" && activeTab !== "c2c";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -126,7 +126,7 @@ const Index = () => {
                 </button>
               </div>
             </>
-          ) : activeTab === "cloud" || activeTab === "c2c" ? (
+          ) : activeTab === "cloud" || activeTab === "cloud-bench" || activeTab === "c2c" ? (
             <div className="ml-auto">
               <button
                 onClick={() => setActiveTab("chat")}
