@@ -134,6 +134,47 @@ export function QuickStart({
     }
   }, [status, phase]);
 
+  // When model loading fails, log the failed attempt and reset
+  useEffect(() => {
+    if (status === "error" && phase === "downloading") {
+      setPhase("idle");
+      // Log failed attempt to Supabase
+      (async () => {
+        try {
+          const deviceInfo = await getDeviceInfo();
+          await supabase.from("benchmark_runs").insert({
+            model_name: model?.name || "Unknown",
+            engine: engine,
+            avg_tps: 0,
+            avg_ttft_ms: 0,
+            verdict: "Did not finish",
+            results: [],
+            browser: deviceInfo.browser,
+            os: deviceInfo.os,
+            cores: deviceInfo.cores,
+            ram_gb: deviceInfo.ram,
+            gpu: deviceInfo.gpu,
+            gpu_vendor: deviceInfo.gpuVendor,
+            screen_res: deviceInfo.screenRes,
+            pixel_ratio: deviceInfo.pixelRatio,
+            user_agent: deviceInfo.userAgent,
+            device_model: deviceInfo.deviceModel,
+            device_type: deviceInfo.deviceType,
+            country: deviceInfo.country,
+            city: deviceInfo.city,
+          });
+        } catch (e) {
+          console.error("Failed to log crash attempt:", e);
+        }
+      })();
+      toast({
+        title: "Model loading failed",
+        description: statusMessage || "Your device may not support this model. The attempt has been logged.",
+        variant: "destructive",
+      });
+    }
+  }, [status, phase, statusMessage, model, engine]);
+
   // Run benchmark when phase switches to benchmarking
   useEffect(() => {
     if (phase !== "benchmarking") return;
