@@ -110,6 +110,13 @@ export function QuickStart({
   const engine = model?.engine || activeEngine || "onnx";
 
   const [phase, setPhase] = useState<Phase>(status === "ready" ? "ready_to_bench" : "idle");
+
+  // Sync phase when status changes to ready (e.g. model was already loaded before mounting)
+  useEffect(() => {
+    if (status === "ready" && phase === "idle") {
+      setPhase("ready_to_bench");
+    }
+  }, [status, phase]);
   const [benchResults, setBenchResults] = useState<BenchmarkResult[]>([]);
   const [benchProgress, setBenchProgress] = useState(0);
   const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport | null>(null);
@@ -271,6 +278,13 @@ export function QuickStart({
 
   const handleGo = async () => {
     if (!model || noEngineAvailable) return;
+
+    // If model is already loaded, skip download and go straight to benchmark
+    if (status === "ready") {
+      setPhase("ready_to_bench");
+      return;
+    }
+
     setPhase("downloading");
 
     // Log attempt immediately — if the page crashes, this row stays as "Did not finish"
