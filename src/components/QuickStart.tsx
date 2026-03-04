@@ -399,7 +399,7 @@ export function QuickStart({
           <span className="text-foreground"> AI?</span>
         </h1>
         <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-          Test if your browser can run AI models locally
+          Check if your device can run AI in the browser
         </p>
       </div>
 
