@@ -109,7 +109,7 @@ export function QuickStart({
   const model = getBestQuickStartModel(capabilities);
   const engine = model?.engine || activeEngine || "onnx";
 
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [phase, setPhase] = useState<Phase>(status === "ready" ? "ready_to_bench" : "idle");
   const [benchResults, setBenchResults] = useState<BenchmarkResult[]>([]);
   const [benchProgress, setBenchProgress] = useState(0);
   const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport | null>(null);
@@ -127,10 +127,10 @@ export function QuickStart({
     }).catch(() => setRunningDiagnostics(false));
   }, [model, diagnosticReport]);
 
-  // When model becomes ready after download, go straight to chat (skip auto-bench)
+  // When model becomes ready after download, go to benchmark screen
   useEffect(() => {
     if (status === "ready" && phase === "downloading") {
-      setPhase("done");
+      setPhase("ready_to_bench");
     }
   }, [status, phase]);
 
