@@ -519,8 +519,8 @@ export function QuickStart({
             </button>
             <button
               onClick={async () => {
-                // Delete the stale record and dismiss
-                await supabase.from("benchmark_runs").delete().eq("id", crashRecord.id);
+                // Mark as confirmed crash — keep as permanent record
+                await supabase.from("benchmark_runs").update({ verdict: "Crashed" }).eq("id", crashRecord.id);
                 setCrashRecord(null);
                 setCrashDismissed(true);
               }}
