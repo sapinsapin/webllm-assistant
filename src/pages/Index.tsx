@@ -148,7 +148,7 @@ const Index = () => {
             activeEngine={activeEngine}
             capabilities={capabilities}
             onLoadModel={loadModel}
-            onAdvancedMode={() => setAdvancedMode(true)}
+            onAdvancedMode={() => { setAdvancedMode(true); setQuickStartDismissed(true); }}
             onCloudChat={() => setActiveTab("cloud")}
             onC2CChat={() => setActiveTab("c2c")}
             onRunBenchmark={runBenchmarkPrompt}
