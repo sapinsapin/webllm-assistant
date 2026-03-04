@@ -75,10 +75,13 @@ function detectDeviceModel(gpu: string | null): string | null {
     return "Mac";
   }
   if (ua.includes("Windows")) {
-    if (gpu) return `Windows PC (${gpu})`;
+    if (gpu) return `Windows PC · ${gpu}`;
     return "Windows PC";
   }
-  if (ua.includes("Linux") && !ua.includes("Android")) return "Linux PC";
+  if (ua.includes("Linux") && !ua.includes("Android")) {
+    if (gpu) return `Linux PC · ${gpu}`;
+    return "Linux PC";
+  }
   return null;
 }
 
