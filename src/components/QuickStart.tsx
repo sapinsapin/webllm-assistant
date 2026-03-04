@@ -278,6 +278,13 @@ export function QuickStart({
 
   const handleGo = async () => {
     if (!model || noEngineAvailable) return;
+
+    // If model is already loaded, skip download and go straight to benchmark
+    if (status === "ready") {
+      setPhase("ready_to_bench");
+      return;
+    }
+
     setPhase("downloading");
 
     // Log attempt immediately — if the page crashes, this row stays as "Did not finish"
