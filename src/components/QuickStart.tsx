@@ -321,6 +321,16 @@ export function QuickStart({
             </button>
           </div>
         </div>
+
+        {/* Community benchmark feed */}
+        <div className="w-full max-w-sm mt-2">
+          <h3 className="text-xs font-mono text-muted-foreground mb-3 text-center">
+            🏆 How others performed
+          </h3>
+          <div className="max-h-[220px] overflow-y-auto scrollbar-thin">
+            <CommunityBenchmarks />
+          </div>
+        </div>
       </div>
     );
   }
