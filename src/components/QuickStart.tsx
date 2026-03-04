@@ -10,6 +10,7 @@ import type { ModelStatus, BenchmarkResult } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { getBestQuickStartModel } from "@/lib/models";
 import { BENCHMARK_PROMPTS } from "@/lib/models";
+import { CommunityBenchmarks } from "@/components/CommunityBenchmarks";
 
 type Phase = "idle" | "downloading" | "ready_to_bench" | "benchmarking" | "done";
 
@@ -320,6 +321,16 @@ export function QuickStart({
             </button>
           </div>
         </div>
+
+        {/* Community benchmark feed */}
+        <div className="w-full max-w-sm mt-2">
+          <h3 className="text-xs font-mono text-muted-foreground mb-3 text-center">
+            🏆 How others performed
+          </h3>
+          <div className="max-h-[220px] overflow-y-auto scrollbar-thin">
+            <CommunityBenchmarks />
+          </div>
+        </div>
       </div>
     );
   }
@@ -605,6 +616,18 @@ export function QuickStart({
             <Settings2 className="h-3 w-3" />
             Advanced
           </button>
+        </div>
+      )}
+
+      {/* Community benchmark feed */}
+      {phase === "idle" && (
+        <div className="w-full max-w-md mt-4">
+          <h3 className="text-xs font-mono text-muted-foreground mb-3 text-center">
+            🏆 Community Benchmarks
+          </h3>
+          <div className="max-h-[280px] overflow-y-auto scrollbar-thin">
+            <CommunityBenchmarks />
+          </div>
         </div>
       )}
     </div>
