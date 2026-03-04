@@ -7,32 +7,39 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-async function downloadWithProgress(
-  url: string,
-  hfToken: string | null,
-  onProgress: (pct: number, msg: string) => void
-): Promise<Uint8Array> {
-  let response: Response;
-
-  const useProxy = import.meta.env.VITE_HF_PROXY_ENABLED === "true";
-
-  if (useProxy && !hfToken) {
-    // Feature-flagged: proxy through edge function so the server-side HF_TOKEN stays secret
+async function fetchServerHfToken(): Promise<string | null> {
+  try {
     const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-hf-token`;
-    response = await fetch(proxyUrl, {
+    const res = await fetch(proxyUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
       },
-      body: JSON.stringify({ url }),
     });
-  } else {
-    // Direct download (default) — use user token if provided
-    const headers: Record<string, string> = {};
-    if (hfToken) headers.Authorization = `Bearer ${hfToken}`;
-    response = await fetch(url, { headers });
+    if (!res.ok) return null;
+    const { token } = await res.json();
+    return token || null;
+  } catch {
+    return null;
   }
+}
+
+async function downloadWithProgress(
+  url: string,
+  hfToken: string | null,
+  onProgress: (pct: number, msg: string) => void
+): Promise<Uint8Array> {
+  // Resolve token: user-provided takes priority, then server secret
+  let token = hfToken;
+  if (!token) {
+    token = await fetchServerHfToken();
+  }
+
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(url, { headers });
 
   if (!response.ok) {
     if (response.status === 401) {

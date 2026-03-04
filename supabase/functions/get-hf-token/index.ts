@@ -9,62 +9,21 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
-
-    if (!url || typeof url !== 'string') {
-      return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Only allow HuggingFace URLs to prevent SSRF
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch {
-      return new Response(JSON.stringify({ error: 'Invalid URL' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!parsed.hostname.endsWith('huggingface.co')) {
-      return new Response(JSON.stringify({ error: 'Only HuggingFace URLs are allowed' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const token = Deno.env.get('HF_TOKEN') || '';
-    const fetchHeaders: Record<string, string> = {};
-    if (token) fetchHeaders['Authorization'] = `Bearer ${token}`;
 
-    const upstream = await fetch(url, { headers: fetchHeaders });
-
-    if (!upstream.ok) {
-      // Forward error status but not internal details
-      const body = await upstream.text();
-      return new Response(body, {
-        status: upstream.status,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': upstream.headers.get('content-type') || 'text/plain',
-        },
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'No HF_TOKEN configured on server' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Stream the response back, preserving content-length for progress tracking
-    const responseHeaders: Record<string, string> = { ...corsHeaders };
-    const contentLength = upstream.headers.get('content-length');
-    if (contentLength) responseHeaders['Content-Length'] = contentLength;
-    const contentType = upstream.headers.get('content-type');
-    if (contentType) responseHeaders['Content-Type'] = contentType;
-
-    return new Response(upstream.body, { headers: responseHeaders });
+    return new Response(JSON.stringify({ token }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   } catch (e) {
-    console.error('hf-proxy error:', e);
-    return new Response(JSON.stringify({ error: 'Proxy error' }), {
+    console.error('get-hf-token error:', e);
+    return new Response(JSON.stringify({ error: 'Internal error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
