@@ -71,11 +71,11 @@ export const PRESET_MODELS: ModelPreset[] = [
 
   // Transformers.js models (WASM fallback — works everywhere including iOS)
   {
-    id: "onnx-qwen3-0.6b",
-    name: "Qwen3 0.6B",
-    size: "~400MB",
-    url: "onnx-community/Qwen3-0.6B-ONNX",
-    description: "Qwen3 0.6B via Transformers.js. Works on all browsers (WASM). Slower than WebGPU.",
+    id: "onnx-smollm2-135m",
+    name: "SmolLM2 135M",
+    size: "~100MB",
+    url: "onnx-community/SmolLM2-135M-ONNX",
+    description: "SmolLM2 135M via Transformers.js. Works on all browsers (WASM). Tiny and fast.",
     gated: false,
     engine: "onnx",
   },
