@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BenchmarkSuite } from "@/components/BenchmarkSuite";
+import { Badge } from "@/components/ui/badge";
+import { useLlmInference } from "@/hooks/useLlmInference";
 
 interface PerPromptResult {
   prompt: string;
