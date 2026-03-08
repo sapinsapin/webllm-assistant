@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Cpu, ArrowLeft, Zap, Timer, Gauge, Monitor, HardDrive,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, ChevronLeft,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BenchmarkSuite } from "@/components/BenchmarkSuite";
