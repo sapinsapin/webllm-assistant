@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Cpu, ArrowLeft, Zap, Timer, Gauge, Monitor, HardDrive,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, ChevronLeft,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BenchmarkSuite } from "@/components/BenchmarkSuite";
@@ -202,25 +202,33 @@ function RunCard({ run }: { run: BenchmarkRun }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
 export default function Benchmarks() {
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchRuns = () => {
+    setLoading(true);
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
     supabase
       .from("benchmark_runs")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
+      .range(from, to)
+      .then(({ data, count }) => {
         setRuns((data as unknown as BenchmarkRun[]) || []);
+        setTotalCount(count ?? 0);
         setLoading(false);
       });
   };
 
   useEffect(() => {
     fetchRuns();
-  }, []);
+  }, [page]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -275,11 +283,36 @@ export default function Benchmarks() {
                 <p className="text-xs text-muted-foreground font-mono">Run the test suite above to get started.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {runs.map((run) => (
-                  <RunCard key={run.id} run={run} />
-                ))}
-              </div>
+              <>
+                <div className="space-y-3">
+                  {runs.map((run) => (
+                    <RunCard key={run.id} run={run} />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {Math.ceil(totalCount / PAGE_SIZE) > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-3">
+                    <button
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1.5 text-xs font-mono text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      <ChevronLeft className="h-3 w-3" /> Prev
+                    </button>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {page + 1} / {Math.ceil(totalCount / PAGE_SIZE)}
+                    </span>
+                    <button
+                      onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / PAGE_SIZE) - 1, p + 1))}
+                      disabled={page >= Math.ceil(totalCount / PAGE_SIZE) - 1}
+                      className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1.5 text-xs font-mono text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      Next <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>
