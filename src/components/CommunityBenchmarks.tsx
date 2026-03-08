@@ -67,6 +67,7 @@ export function CommunityBenchmarks() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -74,7 +75,7 @@ export function CommunityBenchmarks() {
     const to = from + PAGE_SIZE - 1;
     supabase
       .from("benchmark_runs")
-      .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu", { count: "exact" })
+      .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to)
       .then(({ data, count }) => {
