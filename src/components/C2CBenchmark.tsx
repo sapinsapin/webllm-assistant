@@ -2,6 +2,9 @@ import { useState, useCallback } from "react";
 import { Cloud, Cpu, Play, CheckCircle2, Loader2, BarChart3 } from "lucide-react";
 import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkPrompt } from "@/lib/models";
 import type { InferenceEngine } from "@/lib/inference/types";
+import { supabase } from "@/integrations/supabase/client";
+import { getDeviceInfo } from "@/lib/deviceInfo";
+import { toast } from "sonner";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
