@@ -73,11 +73,15 @@ const totalSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
 
 export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const {
-    status, statusMessage, downloadProgress, activeEngine, capabilities,
+    status, statusMessage, downloadProgress, activeEngine, capabilities, currentModelName,
     loadModel, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
 
-  const model = getBestQuickStartModel(capabilities);
+  // Use currently loaded model if ready, otherwise pick best model for capabilities
+  const loadedModel = status === "ready" && currentModelName
+    ? MODELS.find(m => m.name === currentModelName)
+    : null;
+  const model = loadedModel || getBestQuickStartModel(capabilities);
   const engine = model?.engine || activeEngine || "onnx";
 
   const [phase, setPhase] = useState<Phase>("idle");
