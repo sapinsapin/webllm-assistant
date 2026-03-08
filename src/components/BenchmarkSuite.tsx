@@ -79,7 +79,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
   // Use currently loaded model if ready, otherwise pick best model for capabilities
   const loadedModel = status === "ready" && currentModelName
-    ? MODELS.find(m => m.name === currentModelName)
+    ? PRESET_MODELS.find(m => m.name === currentModelName)
     : null;
   const model = loadedModel || getBestQuickStartModel(capabilities);
   const engine = model?.engine || activeEngine || "onnx";
