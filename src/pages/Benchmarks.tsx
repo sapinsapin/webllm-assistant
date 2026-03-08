@@ -243,6 +243,17 @@ export default function Benchmarks() {
           </span>
         </Link>
         <span className="ml-2 text-xs text-muted-foreground font-mono">/ benchmarks</span>
+        {status === "ready" && currentModelName && (
+          <Badge variant="secondary" className="ml-2 gap-1 font-mono text-xs">
+            <Zap className="h-3 w-3 text-primary" />
+            {currentModelName}
+          </Badge>
+        )}
+        {status !== "ready" && (
+          <Badge variant="outline" className="ml-2 gap-1 font-mono text-xs text-muted-foreground">
+            No model loaded
+          </Badge>
+        )}
         <Link
           to="/"
           className="ml-auto flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
