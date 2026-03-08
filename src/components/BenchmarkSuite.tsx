@@ -3,7 +3,7 @@ import { Loader2, Play, RotateCcw, Zap, Timer, Gauge } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceInfo } from "@/lib/deviceInfo";
-import { getBestQuickStartModel, BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkCategory } from "@/lib/models";
+import { getBestQuickStartModel, BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, PRESET_MODELS, type BenchmarkCategory } from "@/lib/models";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import type { BenchmarkResult } from "@/hooks/useLlmInference";
 
@@ -73,11 +73,15 @@ const totalSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
 
 export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const {
-    status, statusMessage, downloadProgress, activeEngine, capabilities,
+    status, statusMessage, downloadProgress, activeEngine, capabilities, currentModelName,
     loadModel, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
 
-  const model = getBestQuickStartModel(capabilities);
+  // Use currently loaded model if ready, otherwise pick best model for capabilities
+  const loadedModel = status === "ready" && currentModelName
+    ? PRESET_MODELS.find(m => m.name === currentModelName)
+    : null;
+  const model = loadedModel || getBestQuickStartModel(capabilities);
   const engine = model?.engine || activeEngine || "onnx";
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -363,7 +367,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
       {/* Model info footer */}
       {model && phase === "idle" && !noEngine && (
         <div className="border-t border-border px-4 py-2.5 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-          <span>{model.name} · {model.size}</span>
+          <span>
+            {model.name} · {model.size}
+            {loadedModel && <span className="ml-1 text-primary">(loaded)</span>}
+          </span>
           <span>{engine === "mediapipe" ? "MediaPipe · WebGPU" : engine === "webllm" ? "WebLLM · WebGPU" : "Transformers.js · WASM"}</span>
         </div>
       )}
