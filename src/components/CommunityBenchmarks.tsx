@@ -58,21 +58,29 @@ function deviceLabel(run: BenchRun): string {
   return parts.join(" · ") || "Unknown device";
 }
 
+const PAGE_SIZE = 10;
+
 export function CommunityBenchmarks() {
   const [runs, setRuns] = useState<BenchRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
+    setLoading(true);
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
     supabase
       .from("benchmark_runs")
-      .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu")
+      .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu", { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
+      .range(from, to)
+      .then(({ data, count }) => {
         setRuns((data as BenchRun[]) ?? []);
+        setTotalCount(count ?? 0);
         setLoading(false);
       });
-  }, []);
+  }, [page]);
 
   if (loading) {
     return (
