@@ -2,6 +2,9 @@ import { useState, useCallback } from "react";
 import { Cloud, Cpu, Play, CheckCircle2, Loader2, BarChart3 } from "lucide-react";
 import { BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, type BenchmarkPrompt } from "@/lib/models";
 import type { InferenceEngine } from "@/lib/inference/types";
+import { supabase } from "@/integrations/supabase/client";
+import { getDeviceInfo } from "@/lib/deviceInfo";
+import { toast } from "sonner";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
@@ -146,6 +149,69 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
       updated[i] = row;
       setRows([...updated]);
     }
+
+    // Save to community benchmarks
+    const finishedRows = updated.filter(r => r.status === "done");
+    if (finishedRows.length > 0) {
+      try {
+        const device = await getDeviceInfo();
+
+        // Save cloud results
+        const cloudRows = finishedRows.filter(r => r.cloud);
+        if (cloudRows.length > 0) {
+          const avgCloudTps = cloudRows.reduce((s, r) => s + r.cloud!.tps, 0) / cloudRows.length;
+          const avgCloudLatency = cloudRows.reduce((s, r) => s + r.cloud!.timeMs, 0) / cloudRows.length;
+          await supabase.from("benchmark_runs").insert({
+            model_name: "gpt-oss-20b-balitanlp-cpt",
+            engine: "cloud (c2c)",
+            avg_tps: avgCloudTps,
+            avg_ttft_ms: avgCloudLatency,
+            verdict: avgCloudTps >= 20 ? "Great" : avgCloudTps >= 10 ? "Passable" : "Slow",
+            results: cloudRows.map(r => ({
+              prompt: r.prompt.label, category: r.prompt.category,
+              tokensGenerated: r.cloud!.tokensEstimate, timeMs: r.cloud!.timeMs,
+              tokensPerSecond: r.cloud!.tps, ttftMs: r.cloud!.timeMs,
+              tpotMs: r.cloud!.timeMs / r.cloud!.tokensEstimate,
+            })),
+            browser: device.browser, os: device.os, cores: device.cores, ram_gb: device.ram,
+            gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
+            pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
+            device_model: device.deviceModel, device_type: device.deviceType,
+            country: device.country, city: device.city,
+          });
+        }
+
+        // Save local results
+        const localRows = finishedRows.filter(r => r.local);
+        if (localRows.length > 0) {
+          const avgLocalTps = localRows.reduce((s, r) => s + r.local!.tps, 0) / localRows.length;
+          const avgLocalLatency = localRows.reduce((s, r) => s + r.local!.timeMs, 0) / localRows.length;
+          await supabase.from("benchmark_runs").insert({
+            model_name: "local-model",
+            engine: "local (c2c)",
+            avg_tps: avgLocalTps,
+            avg_ttft_ms: avgLocalLatency,
+            verdict: avgLocalTps >= 5 ? "Great" : avgLocalTps >= 2 ? "Passable" : "Slow",
+            results: localRows.map(r => ({
+              prompt: r.prompt.label, category: r.prompt.category,
+              tokensGenerated: r.local!.tokensEstimate, timeMs: r.local!.timeMs,
+              tokensPerSecond: r.local!.tps, ttftMs: r.local!.timeMs,
+              tpotMs: r.local!.timeMs / r.local!.tokensEstimate,
+            })),
+            browser: device.browser, os: device.os, cores: device.cores, ram_gb: device.ram,
+            gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
+            pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
+            device_model: device.deviceModel, device_type: device.deviceType,
+            country: device.country, city: device.city,
+          });
+        }
+
+        toast.success("C2C benchmark saved to community!");
+      } catch (err) {
+        console.error("Failed to save C2C benchmark:", err);
+      }
+    }
+
     setRunning(false);
   }, [prompts, localReady, engineRef, runCloudPrompt, runLocalPrompt]);
 
