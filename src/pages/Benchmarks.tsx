@@ -202,25 +202,33 @@ function RunCard({ run }: { run: BenchmarkRun }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
 export default function Benchmarks() {
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchRuns = () => {
+    setLoading(true);
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
     supabase
       .from("benchmark_runs")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
+      .range(from, to)
+      .then(({ data, count }) => {
         setRuns((data as unknown as BenchmarkRun[]) || []);
+        setTotalCount(count ?? 0);
         setLoading(false);
       });
   };
 
   useEffect(() => {
     fetchRuns();
-  }, []);
+  }, [page]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
