@@ -3,7 +3,7 @@ import { Loader2, Play, RotateCcw, Zap, Timer, Gauge } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceInfo } from "@/lib/deviceInfo";
-import { getBestQuickStartModel, BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, MODELS, type BenchmarkCategory } from "@/lib/models";
+import { getBestQuickStartModel, BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, PRESET_MODELS, type BenchmarkCategory } from "@/lib/models";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import type { BenchmarkResult } from "@/hooks/useLlmInference";
 
