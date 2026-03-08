@@ -367,7 +367,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
       {/* Model info footer */}
       {model && phase === "idle" && !noEngine && (
         <div className="border-t border-border px-4 py-2.5 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-          <span>{model.name} · {model.size}</span>
+          <span>
+            {model.name} · {model.size}
+            {loadedModel && <span className="ml-1 text-primary">(loaded)</span>}
+          </span>
           <span>{engine === "mediapipe" ? "MediaPipe · WebGPU" : engine === "webllm" ? "WebLLM · WebGPU" : "Transformers.js · WASM"}</span>
         </div>
       )}
