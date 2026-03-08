@@ -207,6 +207,7 @@ function RunCard({ run }: { run: BenchmarkRun }) {
 const PAGE_SIZE = 10;
 
 export default function Benchmarks() {
+  const { status, currentModelName } = useLlmInference();
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
