@@ -100,57 +100,84 @@ export function CommunityBenchmarks() {
     );
   }
 
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
   return (
-    <div className="space-y-2">
-      {runs.map((run) => {
-        const verdictClass = VERDICT_STYLE[run.verdict] ?? "text-muted-foreground bg-secondary/30 border-border";
-        const emoji = VERDICT_EMOJI[run.verdict] ?? "⚡";
-        return (
-          <div
-            key={run.id}
-            className="flex items-center gap-3 rounded-lg border border-border bg-card/50 px-4 py-3 transition-colors hover:bg-card/80"
-          >
-            <DeviceIcon type={run.device_type} />
+    <div className="space-y-3">
+      <div className="space-y-2">
+        {runs.map((run) => {
+          const verdictClass = VERDICT_STYLE[run.verdict] ?? "text-muted-foreground bg-secondary/30 border-border";
+          const emoji = VERDICT_EMOJI[run.verdict] ?? "⚡";
+          return (
+            <div
+              key={run.id}
+              className="flex items-center gap-3 rounded-lg border border-border bg-card/50 px-4 py-3 transition-colors hover:bg-card/80"
+            >
+              <DeviceIcon type={run.device_type} />
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-sm font-medium text-foreground truncate">
-                  {deviceLabel(run)}
-                </span>
-                {run.gpu && (
-                  <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[140px]">
-                    {run.gpu}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-sm font-medium text-foreground truncate">
+                    {deviceLabel(run)}
                   </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                {(run.city || run.country) && (
+                  {run.gpu && (
+                    <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[140px]">
+                      {run.gpu}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                  {(run.city || run.country) && (
+                    <span className="flex items-center gap-0.5">
+                      <MapPin className="h-2.5 w-2.5" />
+                      {[run.city, run.country].filter(Boolean).join(", ")}
+                    </span>
+                  )}
                   <span className="flex items-center gap-0.5">
-                    <MapPin className="h-2.5 w-2.5" />
-                    {[run.city, run.country].filter(Boolean).join(", ")}
+                    <Clock className="h-2.5 w-2.5" />
+                    {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}
                   </span>
-                )}
-                <span className="flex items-center gap-0.5">
-                  <Clock className="h-2.5 w-2.5" />
-                  {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}
-                </span>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="text-right">
-                <span className="font-mono text-sm font-semibold text-foreground">
-                  {run.avg_tps.toFixed(1)}
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="text-right">
+                  <span className="font-mono text-sm font-semibold text-foreground">
+                    {run.avg_tps.toFixed(1)}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground ml-1">tok/s</span>
+                </div>
+                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${verdictClass}`}>
+                  {emoji} {run.verdict}
                 </span>
-                <span className="text-[10px] text-muted-foreground ml-1">tok/s</span>
               </div>
-              <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${verdictClass}`}>
-                {emoji} {run.verdict}
-              </span>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-1">
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+            className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1.5 text-xs font-mono text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <ChevronLeft className="h-3 w-3" /> Prev
+          </button>
+          <span className="text-xs font-mono text-muted-foreground">
+            {page + 1} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page >= totalPages - 1}
+            className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1.5 text-xs font-mono text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none"
+          >
+            Next <ChevronRight className="h-3 w-3" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
