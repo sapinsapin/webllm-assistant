@@ -283,11 +283,36 @@ export default function Benchmarks() {
                 <p className="text-xs text-muted-foreground font-mono">Run the test suite above to get started.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {runs.map((run) => (
-                  <RunCard key={run.id} run={run} />
-                ))}
-              </div>
+              <>
+                <div className="space-y-3">
+                  {runs.map((run) => (
+                    <RunCard key={run.id} run={run} />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {Math.ceil(totalCount / PAGE_SIZE) > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-3">
+                    <button
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1.5 text-xs font-mono text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      <ChevronLeft className="h-3 w-3" /> Prev
+                    </button>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {page + 1} / {Math.ceil(totalCount / PAGE_SIZE)}
+                    </span>
+                    <button
+                      onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / PAGE_SIZE) - 1, p + 1))}
+                      disabled={page >= Math.ceil(totalCount / PAGE_SIZE) - 1}
+                      className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2.5 py-1.5 text-xs font-mono text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      Next <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>
