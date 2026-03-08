@@ -312,6 +312,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
     currentModelName,
     activeEngine,
     capabilities,
+    engineRef,
     loadModel,
     unloadModel,
     sendMessage,
