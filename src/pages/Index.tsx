@@ -171,8 +171,8 @@ const Index = () => {
               capabilities={capabilities}
               onLoadModel={loadModel}
               onBackToQuickStart={() => {
-                unloadModel();
                 setAdvancedMode(false);
+                setQuickStartDismissed(false);
               }}
             />
           </div>
