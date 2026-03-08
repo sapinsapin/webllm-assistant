@@ -111,49 +111,158 @@ export function CommunityBenchmarks() {
         {runs.map((run) => {
           const verdictClass = VERDICT_STYLE[run.verdict] ?? "text-muted-foreground bg-secondary/30 border-border";
           const emoji = VERDICT_EMOJI[run.verdict] ?? "⚡";
+          const isExpanded = expandedId === run.id;
           return (
             <div
               key={run.id}
-              className="flex items-center gap-3 rounded-lg border border-border bg-card/50 px-4 py-3 transition-colors hover:bg-card/80"
+              className="rounded-lg border border-border bg-card/50 overflow-hidden transition-colors"
             >
-              <DeviceIcon type={run.device_type} />
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : run.id)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-card/80 transition-colors"
+              >
+                <DeviceIcon type={run.device_type} />
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-sm font-medium text-foreground truncate">
-                    {deviceLabel(run)}
-                  </span>
-                  {run.gpu && (
-                    <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[140px]">
-                      {run.gpu}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-sm font-medium text-foreground truncate">
+                      {deviceLabel(run)}
                     </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                  {(run.city || run.country) && (
+                    {run.gpu && (
+                      <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[140px]">
+                        {run.gpu}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                    {(run.city || run.country) && (
+                      <span className="flex items-center gap-0.5">
+                        <MapPin className="h-2.5 w-2.5" />
+                        {[run.city, run.country].filter(Boolean).join(", ")}
+                      </span>
+                    )}
                     <span className="flex items-center gap-0.5">
-                      <MapPin className="h-2.5 w-2.5" />
-                      {[run.city, run.country].filter(Boolean).join(", ")}
+                      <Clock className="h-2.5 w-2.5" />
+                      {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}
                     </span>
-                  )}
-                  <span className="flex items-center gap-0.5">
-                    <Clock className="h-2.5 w-2.5" />
-                    {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}
-                  </span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="text-right">
-                  <span className="font-mono text-sm font-semibold text-foreground">
-                    {run.avg_tps.toFixed(1)}
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <span className="font-mono text-sm font-semibold text-foreground">
+                      {run.avg_tps.toFixed(1)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground ml-1">tok/s</span>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${verdictClass}`}>
+                    {emoji} {run.verdict}
                   </span>
-                  <span className="text-[10px] text-muted-foreground ml-1">tok/s</span>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                 </div>
-                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${verdictClass}`}>
-                  {emoji} {run.verdict}
-                </span>
-              </div>
+              </button>
+
+              {isExpanded && (
+                <div className="border-t border-border px-4 py-3 bg-secondary/10">
+                  <h4 className="text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider mb-2">Device Details</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-[11px] font-mono">
+                    {run.device_model && (
+                      <div className="flex items-center gap-1.5">
+                        <Smartphone className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Device:</span>
+                        <span className="text-foreground font-medium">{run.device_model}</span>
+                      </div>
+                    )}
+                    {run.device_type && (
+                      <div className="flex items-center gap-1.5">
+                        <Monitor className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Type:</span>
+                        <span className="text-foreground font-medium capitalize">{run.device_type}</span>
+                      </div>
+                    )}
+                    {run.os && (
+                      <div className="flex items-center gap-1.5">
+                        <Monitor className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">OS:</span>
+                        <span className="text-foreground font-medium">{run.os}</span>
+                      </div>
+                    )}
+                    {run.browser && (
+                      <div className="flex items-center gap-1.5">
+                        <Monitor className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Browser:</span>
+                        <span className="text-foreground font-medium">{run.browser}</span>
+                      </div>
+                    )}
+                    {run.cores && (
+                      <div className="flex items-center gap-1.5">
+                        <Cpu className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Cores:</span>
+                        <span className="text-foreground font-medium">{run.cores}</span>
+                      </div>
+                    )}
+                    {run.ram_gb && (
+                      <div className="flex items-center gap-1.5">
+                        <MemoryStick className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">RAM:</span>
+                        <span className="text-foreground font-medium">{run.ram_gb} GB</span>
+                      </div>
+                    )}
+                    {run.gpu && (
+                      <div className="flex items-center gap-1.5 col-span-2 sm:col-span-1">
+                        <HardDrive className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">GPU:</span>
+                        <span className="text-foreground font-medium truncate">{run.gpu}</span>
+                      </div>
+                    )}
+                    {run.gpu_vendor && (
+                      <div className="flex items-center gap-1.5">
+                        <HardDrive className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Vendor:</span>
+                        <span className="text-foreground font-medium">{run.gpu_vendor}</span>
+                      </div>
+                    )}
+                    {run.screen_res && (
+                      <div className="flex items-center gap-1.5">
+                        <Monitor className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Screen:</span>
+                        <span className="text-foreground font-medium">{run.screen_res}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <h4 className="text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider mt-3 mb-2">Benchmark Info</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-[11px] font-mono">
+                    <div className="flex items-center gap-1.5">
+                      <Cpu className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Model:</span>
+                      <span className="text-foreground font-medium truncate">{run.model_name}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Engine:</span>
+                      <span className="text-foreground font-medium">{run.engine}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="h-3 w-3 text-primary" />
+                      <span className="text-muted-foreground">Avg TPS:</span>
+                      <span className="text-foreground font-medium">{run.avg_tps.toFixed(1)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Avg TTFT:</span>
+                      <span className="text-foreground font-medium">{run.avg_ttft_ms.toFixed(0)} ms</span>
+                    </div>
+                    {(run.city || run.country) && (
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Location:</span>
+                        <span className="text-foreground font-medium">{[run.city, run.country].filter(Boolean).join(", ")}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
