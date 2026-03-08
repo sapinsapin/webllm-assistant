@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
