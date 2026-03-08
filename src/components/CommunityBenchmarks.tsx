@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin, HardDrive, MemoryStick } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface BenchRun {
@@ -21,6 +21,8 @@ interface BenchRun {
   cores: number | null;
   ram_gb: number | null;
   gpu: string | null;
+  gpu_vendor: string | null;
+  screen_res: string | null;
 }
 
 const VERDICT_STYLE: Record<string, string> = {
