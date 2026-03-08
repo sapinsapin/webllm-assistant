@@ -36,6 +36,7 @@ interface LlmInferenceContextValue {
   currentModelName: string;
   activeEngine: EngineType | null;
   capabilities: EngineCapability[];
+  engineRef: React.RefObject<InferenceEngine | null>;
   loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType) => Promise<void>;
   unloadModel: () => void;
   sendMessage: (userMessage: string) => Promise<void>;
