@@ -4,7 +4,8 @@ import { ChatInput } from "@/components/ChatInput";
 import { C2CBenchmark } from "@/components/C2CBenchmark";
 import { Cloud, Cpu, Loader2, CheckCircle2, AlertCircle, ArrowDownToLine, BarChart3, MessageSquare } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
-import type { EngineCapability, EngineType, InferenceEngine } from "@/lib/inference/types";
+import { useLlmInference } from "@/hooks/useLlmInference";
+import type { InferenceEngine } from "@/lib/inference/types";
 import { createEngine } from "@/lib/inference";
 import { getBestQuickStartModel } from "@/lib/models";
 
@@ -14,12 +15,15 @@ type C2CMode = "cloud" | "local";
 type LocalState = "idle" | "loading" | "ready" | "error";
 type C2CView = "chat" | "benchmark";
 
-interface C2CChatProps {
-  capabilities: EngineCapability[];
-  activeEngine: EngineType | null;
-}
+export function C2CChat() {
+  const {
+    status: globalStatus,
+    currentModelName: globalModelName,
+    activeEngine,
+    capabilities,
+    engineRef: globalEngineRef,
+  } = useLlmInference();
 
-export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +36,14 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
   const [view, setView] = useState<C2CView>("chat");
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const engineRef = useRef<InferenceEngine | null>(null);
+  // Local engine ref only used when we need to load a fallback model
+  const ownEngineRef = useRef<InferenceEngine | null>(null);
   const loadStarted = useRef(false);
+
+  // Effective engine: prefer the globally loaded one, fall back to own
+  const engineRef = globalStatus === "ready" && globalEngineRef.current
+    ? globalEngineRef
+    : ownEngineRef;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -41,8 +51,16 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
     }
   }, [messages]);
 
-  // Start loading local model in the background on mount
+  // If a model is already loaded globally, skip background loading
   useEffect(() => {
+    if (globalStatus === "ready" && globalEngineRef.current) {
+      setLocalState("ready");
+      setLocalStatusMsg(`${globalModelName} ready`);
+      setMode("local");
+      return;
+    }
+
+    // Otherwise, load a model in the background
     if (loadStarted.current) return;
     loadStarted.current = true;
 
@@ -60,7 +78,7 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
         setLocalState("loading");
         setLocalStatusMsg(`Loading ${model.name}...`);
         const engine = createEngine(engineType);
-        engineRef.current = engine;
+        ownEngineRef.current = engine;
 
         await engine.load(model.url, (pct, msg) => {
           setLocalProgress(Math.max(pct, 0));
@@ -69,7 +87,6 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
 
         setLocalState("ready");
         setLocalStatusMsg(`${model.name} ready`);
-        // Auto-switch to local
         setMode("local");
       } catch (err) {
         console.error("C2C local load error:", err);
@@ -79,9 +96,9 @@ export function C2CChat({ capabilities, activeEngine }: C2CChatProps) {
     })();
 
     return () => {
-      engineRef.current?.unload();
+      ownEngineRef.current?.unload();
     };
-  }, [capabilities, activeEngine]);
+  }, [capabilities, activeEngine, globalStatus, globalModelName, globalEngineRef]);
 
   const sendCloudMessage = useCallback(
     async (input: string, currentMessages: ChatMessageType[]): Promise<string> => {
