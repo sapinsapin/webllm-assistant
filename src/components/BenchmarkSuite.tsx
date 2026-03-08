@@ -194,10 +194,15 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
   const handleRun = () => {
     if (!model || noEngine) return;
-    setPhase("downloading");
     setAggregated([]);
     setProgress(0);
-    loadModel(model.url, model.name, undefined, model.engine);
+    if (status === "ready") {
+      // Model already loaded — skip download, go straight to benchmarking
+      setPhase("benchmarking");
+    } else {
+      setPhase("downloading");
+      loadModel(model.url, model.name, undefined, model.engine);
+    }
   };
 
   const handleRetry = () => {
