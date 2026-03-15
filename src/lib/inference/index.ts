@@ -1,4 +1,4 @@
-export type { EngineType, EngineStatus, EngineCapability, InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
+export type { EngineType, EngineStatus, EngineCapability, InferenceEngine, InferenceCallbacks, GenerationResult, ImageAttachment } from "./types";
 export { detectCapabilities, getBestEngine } from "./detect";
 export { MediaPipeEngine } from "./mediapipe-engine";
 export { WebLLMEngine } from "./webllm-engine";

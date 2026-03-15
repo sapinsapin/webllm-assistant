@@ -72,14 +72,13 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const loadModel = useCallback(
-    async (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType) => {
+    async (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType, visionEnabled?: boolean) => {
       try {
         const engineType = engineOverride || activeEngine || "mediapipe";
         setStatus("loading");
         setDownloadProgress(0);
         setCurrentModelName(modelName || modelUrl.split("/").pop() || "Unknown");
 
-        // Create engine instance
         const engine = createEngine(engineType);
         engineRef.current = engine;
         setActiveEngine(engineType);
@@ -89,7 +88,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         await engine.load(modelUrl, (pct, msg) => {
           setDownloadProgress(Math.max(pct, 0));
           setStatusMessage(msg);
-        }, hfToken);
+        }, hfToken, { vision: visionEnabled });
 
         setStatus("ready");
         setStatusMessage(`Model loaded via ${engine.label}`);
