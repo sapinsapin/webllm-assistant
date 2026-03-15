@@ -8,6 +8,7 @@ export interface ModelPreset {
   description: string;
   gated: boolean;
   engine: EngineType;
+  vision?: boolean;
 }
 
 export const PRESET_MODELS: ModelPreset[] = [
