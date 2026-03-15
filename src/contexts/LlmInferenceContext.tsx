@@ -40,7 +40,7 @@ interface LlmInferenceContextValue {
   engineRef: React.RefObject<InferenceEngine | null>;
   loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType) => Promise<void>;
   unloadModel: () => void;
-  sendMessage: (userMessage: string) => Promise<void>;
+  sendMessage: (userMessage: string, images?: string[]) => Promise<void>;
   runBenchmarkPrompt: (promptText: string, category?: string) => Promise<BenchmarkResult | null>;
   runLongContextBenchmark: (promptText: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
   runMultiTurnBenchmark: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
