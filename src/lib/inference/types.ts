@@ -23,21 +23,31 @@ export interface GenerationResult {
   tpotMs: number;
 }
 
+/** An image attachment for multimodal prompts */
+export interface ImageAttachment {
+  /** Data URL (base64) or object URL */
+  dataUrl: string;
+}
+
 export interface InferenceEngine {
   readonly type: EngineType;
   readonly label: string;
+  /** Whether the loaded model supports vision/image input */
+  supportsVision?: boolean;
 
   load(
     modelId: string,
     onProgress: (pct: number, msg: string) => void,
-    hfToken?: string
+    hfToken?: string,
+    options?: { vision?: boolean }
   ): Promise<void>;
 
   unload(): void;
 
   generateStream(
     prompt: string,
-    callbacks: InferenceCallbacks
+    callbacks: InferenceCallbacks,
+    images?: ImageAttachment[]
   ): Promise<void>;
 
   generateFull(prompt: string): Promise<GenerationResult>;

@@ -54,7 +54,7 @@ interface QuickStartProps {
   downloadProgress: number;
   activeEngine: EngineType | null;
   capabilities: EngineCapability[];
-  onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
+  onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType, vision?: boolean) => void;
   onAdvancedMode: () => void;
   onCloudChat?: () => void;
   onC2CChat?: () => void;
@@ -316,7 +316,7 @@ export function QuickStart({
       console.error("Failed to log load attempt:", e);
     }
 
-    onLoadModel(model.url, model.name, undefined, model.engine);
+    onLoadModel(model.url, model.name, undefined, model.engine, model.vision);
   };
 
   const handleStartBenchmark = () => {

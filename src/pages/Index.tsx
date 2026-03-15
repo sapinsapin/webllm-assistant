@@ -21,7 +21,7 @@ const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
 const Index = () => {
   const {
     status, statusMessage, downloadProgress, messages, isGenerating, currentModelName,
-    activeEngine, capabilities,
+    activeEngine, capabilities, engineRef,
     loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
     runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
@@ -195,7 +195,7 @@ const Index = () => {
             </div>
             <div className="border-t border-border p-4">
               <div className="mx-auto max-w-3xl">
-                <ChatInput onSend={sendMessage} disabled={isGenerating} />
+                <ChatInput onSend={sendMessage} disabled={isGenerating} supportsVision={engineRef.current?.supportsVision} />
               </div>
             </div>
           </>

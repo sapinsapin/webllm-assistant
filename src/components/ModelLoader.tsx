@@ -10,7 +10,7 @@ interface ModelLoaderProps {
   downloadProgress: number;
   activeEngine: EngineType | null;
   capabilities: EngineCapability[];
-  onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType) => void;
+  onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType, vision?: boolean) => void;
   onBackToQuickStart?: () => void;
 }
 
@@ -42,7 +42,7 @@ export function ModelLoader({ status, statusMessage, downloadProgress, activeEng
       onLoadModel(customUrl.trim(), "Custom Model", hfToken.trim() || undefined, selectedEngine);
     } else if (engineModels.length > 0) {
       const model = engineModels[selectedPreset] || engineModels[0];
-      onLoadModel(model.url, model.name, hfToken.trim() || undefined, model.engine);
+      onLoadModel(model.url, model.name, hfToken.trim() || undefined, model.engine, model.vision);
     }
   };
 
@@ -155,6 +155,11 @@ export function ModelLoader({ status, statusMessage, downloadProgress, activeEng
                   {model.gated && (
                     <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-accent font-mono">
                       <Key className="h-2.5 w-2.5" /> Requires HuggingFace token
+                    </span>
+                  )}
+                  {model.vision && (
+                    <span className="mt-1 ml-2 inline-flex items-center gap-1 text-[10px] text-primary font-mono">
+                      📷 Vision
                     </span>
                   )}
                 </button>

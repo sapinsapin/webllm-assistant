@@ -26,6 +26,19 @@ export function ChatMessage({ message }: ChatMessageProps) {
             : "bg-card border border-border text-card-foreground"
         }`}
       >
+        {/* Image attachments */}
+        {message.images && message.images.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {message.images.map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt={`Attachment ${i + 1}`}
+                className="max-h-48 rounded-lg border border-border object-contain"
+              />
+            ))}
+          </div>
+        )}
         <p className="whitespace-pre-wrap font-mono text-[13px]">
           {message.content || (
             <span className="inline-flex gap-1">

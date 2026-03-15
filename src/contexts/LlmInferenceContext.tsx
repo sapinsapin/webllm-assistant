@@ -3,6 +3,7 @@ import {
   type EngineType,
   type InferenceEngine,
   type EngineCapability,
+  type ImageAttachment,
   detectCapabilities,
   getBestEngine,
   createEngine,
@@ -13,6 +14,7 @@ export type ModelStatus = "idle" | "loading" | "ready" | "error";
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  images?: string[];
 }
 
 export interface BenchmarkResult {
@@ -37,9 +39,9 @@ interface LlmInferenceContextValue {
   activeEngine: EngineType | null;
   capabilities: EngineCapability[];
   engineRef: React.RefObject<InferenceEngine | null>;
-  loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType) => Promise<void>;
+  loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType, visionEnabled?: boolean) => Promise<void>;
   unloadModel: () => void;
-  sendMessage: (userMessage: string) => Promise<void>;
+  sendMessage: (userMessage: string, images?: string[]) => Promise<void>;
   runBenchmarkPrompt: (promptText: string, category?: string) => Promise<BenchmarkResult | null>;
   runLongContextBenchmark: (promptText: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
   runMultiTurnBenchmark: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
@@ -70,14 +72,13 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const loadModel = useCallback(
-    async (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType) => {
+    async (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType, visionEnabled?: boolean) => {
       try {
         const engineType = engineOverride || activeEngine || "mediapipe";
         setStatus("loading");
         setDownloadProgress(0);
         setCurrentModelName(modelName || modelUrl.split("/").pop() || "Unknown");
 
-        // Create engine instance
         const engine = createEngine(engineType);
         engineRef.current = engine;
         setActiveEngine(engineType);
@@ -87,7 +88,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         await engine.load(modelUrl, (pct, msg) => {
           setDownloadProgress(Math.max(pct, 0));
           setStatusMessage(msg);
-        }, hfToken);
+        }, hfToken, { vision: visionEnabled });
 
         setStatus("ready");
         setStatusMessage(`Model loaded via ${engine.label}`);
@@ -113,18 +114,21 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const sendMessage = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, images?: string[]) => {
       const engine = engineRef.current;
       if (!engine || isGenerating) return;
 
       const newMessages: ChatMessage[] = [
         ...messages,
-        { role: "user", content: userMessage },
+        { role: "user", content: userMessage, images },
       ];
       setMessages(newMessages);
       setIsGenerating(true);
 
       const prompt = engine.formatPrompt(newMessages);
+
+      // Convert image data URLs to ImageAttachment format
+      const imageAttachments: ImageAttachment[] | undefined = images?.map((dataUrl) => ({ dataUrl }));
 
       try {
         let fullResponse = "";
@@ -141,7 +145,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           onComplete: () => {
             setIsGenerating(false);
           },
-        });
+        }, imageAttachments);
       } catch (err: unknown) {
         console.error("Generation error:", err);
         const msg = err instanceof Error ? err.message : "Unknown error";
