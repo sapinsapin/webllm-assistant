@@ -21,7 +21,7 @@ const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
 const Index = () => {
   const {
     status, statusMessage, downloadProgress, messages, isGenerating, currentModelName,
-    activeEngine, capabilities,
+    activeEngine, capabilities, engineRef,
     loadModel, unloadModel, sendMessage, runBenchmarkPrompt,
     runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
