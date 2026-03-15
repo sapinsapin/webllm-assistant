@@ -41,7 +41,28 @@ export const PRESET_MODELS: ModelPreset[] = [
     engine: "mediapipe",
   },
 
-  // WebLLM models (WebGPU required, different model format)
+  // Gemma 3n models (MediaPipe, WebGPU, vision-capable)
+  {
+    id: "gemma-3n-e2b",
+    name: "Gemma 3n E2B",
+    size: "~3.0GB",
+    url: "https://huggingface.co/google/gemma-3n-E2B-it-litert-lm/resolve/main/gemma-3n-E2B-it-int4-Web.litertlm",
+    description: "Gemma 3n E2B — multimodal (vision + text). Efficient on-device model.",
+    gated: true,
+    engine: "mediapipe",
+    vision: true,
+  },
+  {
+    id: "gemma-3n-e4b",
+    name: "Gemma 3n E4B",
+    size: "~4.3GB",
+    url: "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4-Web.litertlm",
+    description: "Gemma 3n E4B — multimodal (vision + text). Higher quality, needs more VRAM.",
+    gated: true,
+    engine: "mediapipe",
+    vision: true,
+  },
+
   {
     id: "webllm-smollm2-360m",
     name: "SmolLM2 360M",
