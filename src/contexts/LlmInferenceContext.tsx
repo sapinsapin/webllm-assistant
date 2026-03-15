@@ -13,6 +13,7 @@ export type ModelStatus = "idle" | "loading" | "ready" | "error";
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  images?: string[];
 }
 
 export interface BenchmarkResult {
