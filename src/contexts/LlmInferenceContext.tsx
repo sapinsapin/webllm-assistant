@@ -114,18 +114,21 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const sendMessage = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, images?: string[]) => {
       const engine = engineRef.current;
       if (!engine || isGenerating) return;
 
       const newMessages: ChatMessage[] = [
         ...messages,
-        { role: "user", content: userMessage },
+        { role: "user", content: userMessage, images },
       ];
       setMessages(newMessages);
       setIsGenerating(true);
 
       const prompt = engine.formatPrompt(newMessages);
+
+      // Convert image data URLs to ImageAttachment format
+      const imageAttachments: ImageAttachment[] | undefined = images?.map((dataUrl) => ({ dataUrl }));
 
       try {
         let fullResponse = "";
@@ -142,7 +145,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           onComplete: () => {
             setIsGenerating(false);
           },
-        });
+        }, imageAttachments);
       } catch (err: unknown) {
         console.error("Generation error:", err);
         const msg = err instanceof Error ? err.message : "Unknown error";
