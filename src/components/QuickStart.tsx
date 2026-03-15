@@ -316,7 +316,7 @@ export function QuickStart({
       console.error("Failed to log load attempt:", e);
     }
 
-    onLoadModel(model.url, model.name, undefined, model.engine);
+    onLoadModel(model.url, model.name, undefined, model.engine, model.vision);
   };
 
   const handleStartBenchmark = () => {
