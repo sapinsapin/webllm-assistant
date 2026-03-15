@@ -39,7 +39,7 @@ interface LlmInferenceContextValue {
   activeEngine: EngineType | null;
   capabilities: EngineCapability[];
   engineRef: React.RefObject<InferenceEngine | null>;
-  loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType) => Promise<void>;
+  loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType, visionEnabled?: boolean) => Promise<void>;
   unloadModel: () => void;
   sendMessage: (userMessage: string, images?: string[]) => Promise<void>;
   runBenchmarkPrompt: (promptText: string, category?: string) => Promise<BenchmarkResult | null>;
