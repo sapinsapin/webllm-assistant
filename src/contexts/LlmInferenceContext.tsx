@@ -3,6 +3,7 @@ import {
   type EngineType,
   type InferenceEngine,
   type EngineCapability,
+  type ImageAttachment,
   detectCapabilities,
   getBestEngine,
   createEngine,
