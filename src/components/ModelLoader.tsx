@@ -157,6 +157,11 @@ export function ModelLoader({ status, statusMessage, downloadProgress, activeEng
                       <Key className="h-2.5 w-2.5" /> Requires HuggingFace token
                     </span>
                   )}
+                  {model.vision && (
+                    <span className="mt-1 ml-2 inline-flex items-center gap-1 text-[10px] text-primary font-mono">
+                      📷 Vision
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
