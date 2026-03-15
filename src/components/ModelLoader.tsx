@@ -42,7 +42,7 @@ export function ModelLoader({ status, statusMessage, downloadProgress, activeEng
       onLoadModel(customUrl.trim(), "Custom Model", hfToken.trim() || undefined, selectedEngine);
     } else if (engineModels.length > 0) {
       const model = engineModels[selectedPreset] || engineModels[0];
-      onLoadModel(model.url, model.name, hfToken.trim() || undefined, model.engine);
+      onLoadModel(model.url, model.name, hfToken.trim() || undefined, model.engine, model.vision);
     }
   };
 
