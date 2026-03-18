@@ -139,7 +139,7 @@ async function checkGpuLimits(modelBytes: number): Promise<DiagnosticCheck> {
     if (!gpu) {
       return {
         id: "gpu",
-        label: "GPU Buffer Limits",
+        label: "GPU / VRAM",
         status: "unknown",
         value: "No WebGPU",
         detail: "WebGPU not available — will use WASM fallback.",
@@ -149,7 +149,7 @@ async function checkGpuLimits(modelBytes: number): Promise<DiagnosticCheck> {
     if (!adapter) {
       return {
         id: "gpu",
-        label: "GPU Buffer Limits",
+        label: "GPU / VRAM",
         status: "fail",
         value: "No adapter",
         detail: "Could not get GPU adapter.",
@@ -159,39 +159,67 @@ async function checkGpuLimits(modelBytes: number): Promise<DiagnosticCheck> {
     const maxBuffer = adapter.limits?.maxBufferSize ?? 0;
     const maxStorage = adapter.limits?.maxStorageBufferBindingSize ?? 0;
 
-    // For WebGPU models, the largest weight tensor needs to fit in a single buffer
-    // Typical largest tensor is ~25% of model weight for quantized models
-    const largestTensor = modelBytes * 0.25;
+    // Estimate available VRAM from device memory (unified memory architectures)
+    // or fall back to maxBufferSize as a proxy
+    const ramGB = (navigator as any).deviceMemory as number | undefined;
+    // On unified-memory devices (Apple Silicon, mobile), GPU shares system RAM.
+    // Conservatively assume GPU can use ~60% of system RAM.
+    // On discrete GPU systems, maxBufferSize is the best proxy we have.
+    const estimatedVRAM = ramGB
+      ? Math.min(ramGB * 1024 ** 3 * 0.6, maxBuffer * 4)
+      : maxBuffer * 4; // maxBufferSize is typically ~25% of total VRAM
 
-    if (maxBuffer >= largestTensor && maxStorage >= largestTensor) {
+    // Model needs ~1.5-2x its weight in VRAM during initialization
+    const vramNeeded = modelBytes * 2;
+    const vramRatio = vramNeeded / estimatedVRAM;
+
+    // Largest tensor check (~25% of model weight for quantized models)
+    const largestTensor = modelBytes * 0.25;
+    const tensorFits = maxBuffer >= largestTensor && maxStorage >= largestTensor;
+
+    if (!tensorFits) {
       return {
         id: "gpu",
-        label: "GPU Buffer Limits",
-        status: "pass",
+        label: "GPU / VRAM",
+        status: "fail",
         value: formatBytes(maxBuffer),
-        detail: `Max buffer: ${formatBytes(maxBuffer)} — sufficient for model tensors.`,
+        detail: `Max buffer ${formatBytes(maxBuffer)} is too small for this model's tensors. Loading will crash.`,
       };
     }
-    if (maxBuffer >= largestTensor * 0.5) {
+
+    // Aggressive VRAM check: block if model needs >80% of estimated VRAM
+    if (vramRatio > 0.8) {
       return {
         id: "gpu",
-        label: "GPU Buffer Limits",
+        label: "GPU / VRAM",
+        status: "fail",
+        value: `~${formatBytes(estimatedVRAM)} est.`,
+        detail: `Model needs ~${formatBytes(vramNeeded)} VRAM but only ~${formatBytes(estimatedVRAM)} estimated available. Very likely to crash.`,
+      };
+    }
+
+    // Warn if model needs >40% of estimated VRAM
+    if (vramRatio > 0.4) {
+      return {
+        id: "gpu",
+        label: "GPU / VRAM",
         status: "warn",
-        value: formatBytes(maxBuffer),
-        detail: `Max buffer: ${formatBytes(maxBuffer)} — may be tight for larger tensors.`,
+        value: `~${formatBytes(estimatedVRAM)} est.`,
+        detail: `Model needs ~${formatBytes(vramNeeded)} — uses ${Math.round(vramRatio * 100)}% of estimated VRAM. May be unstable on this device.`,
       };
     }
+
     return {
       id: "gpu",
-      label: "GPU Buffer Limits",
-      status: "fail",
-      value: formatBytes(maxBuffer),
-      detail: `Max buffer: ${formatBytes(maxBuffer)} — too small for model tensors.`,
+      label: "GPU / VRAM",
+      status: "pass",
+      value: `~${formatBytes(estimatedVRAM)} est.`,
+      detail: `Estimated VRAM: ~${formatBytes(estimatedVRAM)} — comfortable for ${formatBytes(modelBytes)} model.`,
     };
   } catch {
     return {
       id: "gpu",
-      label: "GPU Buffer Limits",
+      label: "GPU / VRAM",
       status: "unknown",
       value: "Error",
       detail: "Could not query GPU limits.",
