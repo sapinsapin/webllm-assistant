@@ -491,9 +491,32 @@ export function QuickStart({
           <span className="text-foreground"> AI?</span>
         </h1>
         <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-          Check if your device can run AI in the browser
+          Paying too much for token-based AI?
         </p>
       </div>
+
+      {/* Cost comparison pitch */}
+      {phase === "idle" && !noEngineAvailable && (
+        <div className="w-full max-w-sm rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2 text-center">
+          <p className="text-xs font-mono text-foreground font-semibold">
+            💸 OpenAI, Anthropic, Google — tokens add up fast.
+          </p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Test if your device can run AI <span className="text-primary font-medium">locally for free</span> — or estimate your savings with dedicated inference vs. pay-per-token APIs.
+          </p>
+          <div className="flex items-center justify-center gap-4 pt-1">
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground/60 font-mono">Cloud API</p>
+              <p className="text-sm font-bold font-mono text-destructive">~$15/M tok</p>
+            </div>
+            <span className="text-muted-foreground/40 text-xs">→</span>
+            <div className="text-center">
+              <p className="text-[10px] text-muted-foreground/60 font-mono">On-device</p>
+              <p className="text-sm font-bold font-mono text-primary">$0</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* No engine available state */}
       {noEngineAvailable && phase === "idle" && (
