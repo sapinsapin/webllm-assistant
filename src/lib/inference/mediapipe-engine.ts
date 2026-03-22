@@ -61,6 +61,24 @@ async function downloadWithProgress(
   const reader = response.body?.getReader();
   if (!reader) throw new Error("ReadableStream not supported");
 
+  // Pre-allocate a single buffer if we know the size, avoiding chunk array + copy duplication
+  if (total > 0) {
+    const result = new Uint8Array(total);
+    let downloaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      result.set(value, downloaded);
+      downloaded += value.length;
+      const pct = Math.round((downloaded / total) * 100);
+      onProgress(pct, `Downloading: ${formatBytes(downloaded)} / ${formatBytes(total)} (${pct}%)`);
+    }
+
+    return result;
+  }
+
+  // Fallback for unknown size: collect chunks then merge
   const chunks: Uint8Array[] = [];
   let downloaded = 0;
 
@@ -69,11 +87,7 @@ async function downloadWithProgress(
     if (done) break;
     chunks.push(value);
     downloaded += value.length;
-    const pct = total > 0 ? Math.round((downloaded / total) * 100) : -1;
-    const msg = total > 0
-      ? `Downloading: ${formatBytes(downloaded)} / ${formatBytes(total)} (${pct}%)`
-      : `Downloading: ${formatBytes(downloaded)}`;
-    onProgress(Math.max(pct, 0), msg);
+    onProgress(0, `Downloading: ${formatBytes(downloaded)}`);
   }
 
   const result = new Uint8Array(downloaded);
@@ -82,6 +96,9 @@ async function downloadWithProgress(
     result.set(chunk, offset);
     offset += chunk.length;
   }
+  // Release chunk references immediately
+  chunks.length = 0;
+
   return result;
 }
 
