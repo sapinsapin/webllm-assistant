@@ -123,28 +123,32 @@ export class MediaPipeEngine implements InferenceEngine {
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
     );
 
-    const buffer = await downloadWithProgress(modelUrl, hfToken || null, onProgress);
+    let buffer: Uint8Array | null = await downloadWithProgress(modelUrl, hfToken || null, onProgress);
 
     onProgress(100, "Initializing model (may take a minute)...");
 
     const isVision = options?.vision === true;
 
-    if (isVision) {
-      // Use createFromOptions for vision models with maxNumImages
-      this.llm = await (LlmInference as any).createFromOptions(genai, {
-        baseOptions: {
-          modelAssetBuffer: buffer,
-        },
-        maxTokens: 2048,
-        maxNumImages: 5,
-        topK: 40,
-        temperature: 0.8,
-        randomSeed: 101,
-      });
-      this.supportsVision = true;
-    } else {
-      this.llm = await LlmInference.createFromModelBuffer(genai, buffer);
-      this.supportsVision = false;
+    try {
+      if (isVision) {
+        this.llm = await (LlmInference as any).createFromOptions(genai, {
+          baseOptions: {
+            modelAssetBuffer: buffer,
+          },
+          maxTokens: 2048,
+          maxNumImages: 5,
+          topK: 40,
+          temperature: 0.8,
+          randomSeed: 101,
+        });
+        this.supportsVision = true;
+      } else {
+        this.llm = await LlmInference.createFromModelBuffer(genai, buffer);
+        this.supportsVision = false;
+      }
+    } finally {
+      // Release the JS-side buffer immediately — model is now in GPU memory
+      buffer = null;
     }
   }
 
