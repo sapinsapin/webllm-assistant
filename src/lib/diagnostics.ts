@@ -169,8 +169,8 @@ async function checkGpuLimits(modelBytes: number): Promise<DiagnosticCheck> {
       ? Math.min(ramGB * 1024 ** 3 * 0.6, maxBuffer * 4)
       : maxBuffer * 4; // maxBufferSize is typically ~25% of total VRAM
 
-    // Model needs ~1.5-2x its weight in VRAM during initialization
-    const vramNeeded = modelBytes * 2;
+    // Quantized models need ~1.2x their weight in VRAM (weights + KV cache)
+    const vramNeeded = modelBytes * 1.2;
     const vramRatio = vramNeeded / estimatedVRAM;
 
     // Largest tensor check (~25% of model weight for quantized models)
