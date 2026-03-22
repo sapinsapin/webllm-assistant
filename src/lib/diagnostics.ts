@@ -53,8 +53,8 @@ async function checkDeviceMemory(modelBytes: number): Promise<DiagnosticCheck> {
   }
 
   const ramBytes = ramGB * 1024 ** 3;
-  // Model needs roughly 2× its weight in RAM (loading + inference buffers)
-  const needed = modelBytes * 2;
+  // Quantized models (int4) need ~1.2× their weight in RAM (model + small inference buffers)
+  const needed = modelBytes * 1.2;
 
   if (ramBytes >= needed) {
     return {
