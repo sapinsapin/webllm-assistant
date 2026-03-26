@@ -7,6 +7,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+// Browsers typically cannot allocate extremely large contiguous ArrayBuffers (often ~2GB-ish).
+// MediaPipe requires the full model as a single buffer, so we must hard-block above a safe limit
+// to avoid a tab crash with "Array buffer allocation failed".
+const MAX_MODEL_ARRAYBUFFER_BYTES = Math.floor(1.9 * 1024 * 1024 * 1024);
+
 async function fetchServerHfToken(): Promise<string | null> {
   try {
     const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-hf-token`;
@@ -58,6 +63,16 @@ async function downloadWithProgress(
   const reader = response.body?.getReader();
   if (!reader) throw new Error("ReadableStream not supported");
 
+  if (total > MAX_MODEL_ARRAYBUFFER_BYTES) {
+    onProgress(
+      0,
+      `Model file is ${formatBytes(total)} — too large to hold in a single browser buffer.`
+    );
+    throw new Error(
+      `Model file (${formatBytes(total)}) is too large for in-browser loading (ArrayBuffer allocation limit). Please choose a smaller model.`
+    );
+  }
+
   // Pre-allocate a single buffer if we know the size, avoiding chunk array + copy duplication
   if (total > 0) {
     const result = new Uint8Array(total);
@@ -84,6 +99,16 @@ async function downloadWithProgress(
     if (done) break;
     chunks.push(value);
     downloaded += value.length;
+    if (downloaded > MAX_MODEL_ARRAYBUFFER_BYTES) {
+      try {
+        await reader.cancel();
+      } catch {
+        // ignore
+      }
+      throw new Error(
+        `Model download exceeded ${formatBytes(MAX_MODEL_ARRAYBUFFER_BYTES)} — too large for in-browser loading. Please choose a smaller model.`
+      );
+    }
     onProgress(0, `Downloading: ${formatBytes(downloaded)}`);
   }
 

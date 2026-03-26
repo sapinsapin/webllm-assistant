@@ -125,6 +125,9 @@ export function QuickStart({
   const [crashRecord, setCrashRecord] = useState<{ id: string; model_name: string; created_at: string } | null>(null);
   const [crashDismissed, setCrashDismissed] = useState(false);
 
+  const canProceed = diagnosticReport ? diagnosticReport.canProceed : true;
+  const firstFail = diagnosticReport?.checks.find((c) => c.status === "fail");
+
   const noEngineAvailable = capabilities.length > 0 && !capabilities.some(c => c.available);
 
   // Check for prior crash on mount
@@ -278,6 +281,14 @@ export function QuickStart({
 
   const handleGo = async () => {
     if (!model || noEngineAvailable) return;
+    if (!canProceed) {
+      toast({
+        title: "Blocked by diagnostics",
+        description: firstFail?.detail || "This model is likely to crash on this browser/device.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // If model is already loaded, skip download and go straight to benchmark
     if (status === "ready") {
@@ -573,7 +584,7 @@ export function QuickStart({
       {!noEngineAvailable && (
         <button
           onClick={handleGo}
-          disabled={isActive || !model}
+          disabled={isActive || !model || !canProceed}
           className="group relative flex items-center justify-center"
         >
           {/* Outer ring */}
@@ -656,6 +667,11 @@ export function QuickStart({
                   {statusMessage}
                 </span>
               </>
+            ) : !canProceed ? (
+              <>
+                <XCircle className="h-6 w-6 text-destructive mb-1" />
+                <span className="text-[10px] font-mono text-destructive">Blocked</span>
+              </>
             ) : status === "error" ? (
               <>
                 <AlertCircle className="h-6 w-6 text-destructive mb-1" />
@@ -695,7 +711,9 @@ export function QuickStart({
                 ))}
                 {diagnosticReport.overall === "fail" && (
                   <p className="text-[10px] font-mono text-destructive/80 mt-2">
-                    ⚠️ Your device may not handle this model. You can still try.
+                    {!canProceed
+                      ? `⛔ Blocked: ${firstFail?.detail || "This model is likely to crash."}`
+                      : "⚠️ Your device may not handle this model. You can still try."}
                   </p>
                 )}
               </div>

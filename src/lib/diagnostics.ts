@@ -39,6 +39,51 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(0)} KB`;
 }
 
+async function checkArrayBufferLimit(modelBytes: number): Promise<DiagnosticCheck> {
+  // Mirrors the guard in MediaPipe download logic: large models require a single contiguous
+  // ArrayBuffer, which commonly fails around ~2GB in browsers ("Array buffer allocation failed").
+  const max = Math.floor(1.9 * 1024 ** 3);
+
+  if (!modelBytes) {
+    return {
+      id: "arraybuffer",
+      label: "Browser Buffer Limit",
+      status: "unknown",
+      value: "Unknown",
+      detail: "Could not parse model size to validate browser ArrayBuffer limits.",
+    };
+  }
+
+  if (modelBytes > max) {
+    return {
+      id: "arraybuffer",
+      label: "Browser Buffer Limit",
+      status: "fail",
+      value: `${formatBytes(modelBytes)}`,
+      detail: `This model (${formatBytes(modelBytes)}) exceeds typical browser single-buffer limits (~${formatBytes(max)}). It will crash during download/load.`,
+    };
+  }
+
+  // Warn when we're getting close; overhead + transient allocations can still tip it over.
+  if (modelBytes > max * 0.7) {
+    return {
+      id: "arraybuffer",
+      label: "Browser Buffer Limit",
+      status: "warn",
+      value: `${formatBytes(modelBytes)}`,
+      detail: `This model (${formatBytes(modelBytes)}) is close to browser buffer limits (~${formatBytes(max)}). Loading may be unstable.`,
+    };
+  }
+
+  return {
+    id: "arraybuffer",
+    label: "Browser Buffer Limit",
+    status: "pass",
+    value: `${formatBytes(modelBytes)}`,
+    detail: `Model size ${formatBytes(modelBytes)} is within typical browser single-buffer limits.`,
+  };
+}
+
 async function checkDeviceMemory(modelBytes: number): Promise<DiagnosticCheck> {
   const ramGB = (navigator as any).deviceMemory as number | undefined;
 
@@ -245,6 +290,7 @@ export async function runDiagnostics(modelSizeStr: string): Promise<DiagnosticRe
   const modelBytes = parseSizeToBytes(modelSizeStr);
 
   const checks = await Promise.all([
+    checkArrayBufferLimit(modelBytes),
     checkDeviceMemory(modelBytes),
     checkStorageQuota(modelBytes),
     checkGpuLimits(modelBytes),
