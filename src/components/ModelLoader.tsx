@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cpu, Loader2, CheckCircle2, AlertCircle, Key, Zap, Globe, Server } from "lucide-react";
+import { Cpu, Loader2, CheckCircle2, AlertCircle, Zap, Globe, Server } from "lucide-react";
 import type { ModelStatus } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { PRESET_MODELS, getModelsForEngine } from "@/lib/models";
@@ -28,21 +28,19 @@ const ENGINE_LABELS: Record<EngineType, string> = {
 
 export function ModelLoader({ status, statusMessage, downloadProgress, activeEngine, capabilities, onLoadModel, onBackToQuickStart }: ModelLoaderProps) {
   const [customUrl, setCustomUrl] = useState("");
-  const [hfToken, setHfToken] = useState("");
   const bestAvailable = capabilities.find((c) => c.available)?.engine || "onnx";
   const [selectedEngine, setSelectedEngine] = useState<EngineType>(activeEngine || bestAvailable);
   const [selectedPreset, setSelectedPreset] = useState(0);
-  const [showToken, setShowToken] = useState(false);
 
   // Update selected engine when capabilities arrive
   const engineModels = getModelsForEngine(selectedEngine);
 
   const handleLoad = () => {
     if (customUrl.trim()) {
-      onLoadModel(customUrl.trim(), "Custom Model", hfToken.trim() || undefined, selectedEngine);
+      onLoadModel(customUrl.trim(), "Custom Model", undefined, selectedEngine);
     } else if (engineModels.length > 0) {
       const model = engineModels[selectedPreset] || engineModels[0];
-      onLoadModel(model.url, model.name, hfToken.trim() || undefined, model.engine, model.vision);
+      onLoadModel(model.url, model.name, undefined, model.engine, model.vision);
     }
   };
 
@@ -152,11 +150,6 @@ export function ModelLoader({ status, statusMessage, downloadProgress, activeEng
                     <span className="text-xs text-muted-foreground/60 font-mono">{model.size}</span>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground/70">{model.description}</p>
-                  {model.gated && (
-                    <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-accent font-mono">
-                      <Key className="h-2.5 w-2.5" /> Requires HuggingFace token
-                    </span>
-                  )}
                   {model.vision && (
                     <span className="mt-1 ml-2 inline-flex items-center gap-1 text-[10px] text-primary font-mono">
                       📷 Vision
@@ -167,38 +160,6 @@ export function ModelLoader({ status, statusMessage, downloadProgress, activeEng
             </div>
           )}
         </div>
-
-        {/* HuggingFace Token */}
-        {selectedEngine === "mediapipe" && (
-          <div className="space-y-2">
-            <button
-              onClick={() => setShowToken(!showToken)}
-              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Key className="h-3 w-3" />
-              {showToken ? "Hide" : "Add"} HuggingFace Token
-              {hfToken && <CheckCircle2 className="h-3 w-3 text-primary" />}
-            </button>
-            {showToken && (
-              <div className="space-y-1.5">
-                <input
-                  type="password"
-                  value={hfToken}
-                  onChange={(e) => setHfToken(e.target.value)}
-                  placeholder="hf_..."
-                  disabled={status === "loading"}
-                  className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
-                />
-                <p className="text-[10px] text-muted-foreground/50">
-                  Required for gated models. Get one at{" "}
-                  <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-primary/70 hover:text-primary underline">
-                    huggingface.co/settings/tokens
-                  </a>
-                </p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Custom URL */}
         <div className="space-y-2">
