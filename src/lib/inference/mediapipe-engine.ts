@@ -47,11 +47,8 @@ async function downloadWithProgress(
       );
     }
     if (response.status === 403) {
-      const body = await response.text();
-      const match = body.match(/Visit (https:\/\/huggingface\.co\/[^\s]+)/);
-      const visitUrl = match ? match[1] : url.split("/resolve/")[0];
       throw new Error(
-        `Access denied. Visit ${visitUrl} and click "Agree and access repository".`
+        "Access denied — this model requires license acceptance. The server account may not have accepted the model's EULA yet. Please contact the site administrator."
       );
     }
     throw new Error(`Download failed: ${response.status} ${response.statusText}`);
