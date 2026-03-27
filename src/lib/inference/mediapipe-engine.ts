@@ -8,9 +8,21 @@ function formatBytes(bytes: number): string {
 }
 
 // Browsers typically cannot allocate extremely large contiguous ArrayBuffers (often ~2GB-ish).
-// MediaPipe requires the full model as a single buffer, so we must hard-block above a safe limit
-// to avoid a tab crash with "Array buffer allocation failed".
+// For models below this limit, we download into a buffer for progress tracking.
+// For models above it, we use modelAssetPath to let MediaPipe's WASM stream directly to GPU.
 const MAX_MODEL_ARRAYBUFFER_BYTES = Math.floor(1.9 * 1024 * 1024 * 1024);
+
+/** Send the HF token to the service worker so it can inject auth headers on fetch */
+async function sendTokenToServiceWorker(token: string): Promise<void> {
+  if (!navigator.serviceWorker?.controller) {
+    // Wait briefly for SW to claim
+    await navigator.serviceWorker?.ready;
+  }
+  navigator.serviceWorker?.controller?.postMessage({
+    type: "SET_HF_TOKEN",
+    token,
+  });
+}
 
 async function fetchServerHfToken(): Promise<string | null> {
   try {
