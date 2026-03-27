@@ -73,14 +73,20 @@ self.addEventListener("fetch", (event) => {
         if (cachedResponse) return cachedResponse;
       }
 
-      // For HuggingFace gated models, inject auth header if we have a token
+      // For HuggingFace gated models, inject auth header if we have a token.
+      // Some internal fetchers use `no-cors`; Authorization is stripped in that mode,
+      // so we force a CORS GET here and preserve original headers (e.g. Range).
       let fetchRequest = request;
       if (hfToken && isHfHost(requestUrl.hostname)) {
-        fetchRequest = new Request(request, {
-          headers: new Headers({
-            ...Object.fromEntries(request.headers.entries()),
-            Authorization: `Bearer ${hfToken}`,
-          }),
+        const authedHeaders = new Headers(request.headers);
+        authedHeaders.set("Authorization", `Bearer ${hfToken}`);
+
+        fetchRequest = new Request(request.url, {
+          method: "GET",
+          headers: authedHeaders,
+          mode: "cors",
+          credentials: "omit",
+          redirect: "follow",
         });
       }
 
