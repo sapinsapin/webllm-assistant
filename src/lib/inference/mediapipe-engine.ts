@@ -12,6 +12,13 @@ function formatBytes(bytes: number): string {
 // For models above it, we use modelAssetPath to let MediaPipe's WASM stream directly to GPU.
 const MAX_MODEL_ARRAYBUFFER_BYTES = Math.floor(1.9 * 1024 * 1024 * 1024);
 
+const FORCE_STREAMING_MODEL_HINTS = [".litertlm", "-4b-", "gemma-3n-e2b", "gemma-3n-e4b"];
+
+function shouldForceStreamingLoader(modelUrl: string): boolean {
+  const lower = modelUrl.toLowerCase();
+  return FORCE_STREAMING_MODEL_HINTS.some((hint) => lower.includes(hint));
+}
+
 /** Send the HF token to the service worker so it can inject auth headers on fetch */
 async function sendTokenToServiceWorker(token: string): Promise<void> {
   if (!navigator.serviceWorker?.controller) {
@@ -162,10 +169,18 @@ export class MediaPipeEngine implements InferenceEngine {
     // Determine if the model is too large for JS ArrayBuffer download
     // by doing a HEAD request first to check Content-Length
     let usePath = false;
+    const token = hfToken || (await fetchServerHfToken());
+
     try {
-      const token = hfToken || (await fetchServerHfToken());
       const headHeaders: Record<string, string> = {};
       if (token) headHeaders.Authorization = `Bearer ${token}`;
+
+      // Send token to service worker for auth injection on modelAssetPath fetches.
+      // Do this before we decide the loading path so streaming fetches are always authorized.
+      if (token) {
+        await sendTokenToServiceWorker(token);
+      }
+
       const headRes = await fetch(modelUrl, { method: "HEAD", headers: headHeaders });
       if (headRes.ok) {
         const contentLength = parseInt(headRes.headers.get("content-length") || "0", 10);
@@ -174,12 +189,15 @@ export class MediaPipeEngine implements InferenceEngine {
           onProgress(0, `Model is ${formatBytes(contentLength)} — using streaming loader to avoid memory limits...`);
         }
       }
-      // Send token to service worker for auth injection on modelAssetPath fetches
-      if (token) {
-        await sendTokenToServiceWorker(token);
-      }
     } catch {
       // HEAD failed — fall through to buffer download
+    }
+
+    // Some hosts/models don't return content-length on HEAD; avoid risky buffer downloads
+    // for known large formats/models.
+    if (!usePath && shouldForceStreamingLoader(modelUrl)) {
+      usePath = true;
+      onProgress(0, "Using streaming loader for large model format...");
     }
 
     if (usePath) {
@@ -201,7 +219,7 @@ export class MediaPipeEngine implements InferenceEngine {
       }
     } else {
       // Standard buffer download with progress tracking
-      let buffer: Uint8Array | null = await downloadWithProgress(modelUrl, hfToken || null, onProgress);
+      let buffer: Uint8Array | null = await downloadWithProgress(modelUrl, token || null, onProgress);
       onProgress(100, "Initializing model (may take a minute)...");
 
       try {
