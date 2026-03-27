@@ -14,7 +14,6 @@ const CACHEABLE_EXTENSIONS = [
   ".wasm",
   ".params",
   ".safetensors",
-  ".litertlm",
   ".task",
   ".onnx",
 ];
@@ -51,17 +50,28 @@ function isHfHost(hostname) {
   return HF_HOSTS.some((host) => hostname === host || hostname.endsWith(`.${host}`));
 }
 
+function isLiteRtLmModel(pathname) {
+  return pathname.toLowerCase().endsWith(".litertlm");
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
 
   const requestUrl = new URL(request.url);
-  if (!isCacheableAsset(requestUrl)) return;
+
+  // Allow gated LiteRT-LM downloads to pass through this SW for auth header injection,
+  // but never cache them (they are typically multi-GB and can crash Cache API writes).
+  const isLiteRtRequest = isLiteRtLmModel(requestUrl.pathname);
+  const shouldHandle = isCacheableAsset(requestUrl) || isLiteRtRequest;
+  if (!shouldHandle) return;
 
   event.respondWith(
     caches.open(MODEL_CACHE).then(async (cache) => {
-      const cachedResponse = await cache.match(request);
-      if (cachedResponse) return cachedResponse;
+      if (!isLiteRtRequest) {
+        const cachedResponse = await cache.match(request);
+        if (cachedResponse) return cachedResponse;
+      }
 
       // For HuggingFace gated models, inject auth header if we have a token
       let fetchRequest = request;
@@ -75,10 +85,11 @@ self.addEventListener("fetch", (event) => {
       }
 
       const networkResponse = await fetch(fetchRequest);
-      if (networkResponse.ok) {
-        // Don't cache very large responses (>2GB) — Cache API may fail
-        const contentLength = parseInt(networkResponse.headers.get("content-length") || "0", 10);
-        if (contentLength < 2 * 1024 * 1024 * 1024) {
+      if (networkResponse.ok && !isLiteRtRequest) {
+        // Don't cache when size is unknown or very large (>2GB) — Cache API may fail/crash.
+        const rawLength = networkResponse.headers.get("content-length");
+        const contentLength = parseInt(rawLength || "0", 10);
+        if (contentLength > 0 && contentLength < 2 * 1024 * 1024 * 1024) {
           cache.put(request, networkResponse.clone());
         }
       }
