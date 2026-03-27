@@ -21,14 +21,45 @@ function shouldForceStreamingLoader(modelUrl: string): boolean {
 
 /** Send the HF token to the service worker so it can inject auth headers on fetch */
 async function sendTokenToServiceWorker(token: string): Promise<void> {
-  if (!navigator.serviceWorker?.controller) {
-    // Wait briefly for SW to claim
-    await navigator.serviceWorker?.ready;
-  }
-  navigator.serviceWorker?.controller?.postMessage({
-    type: "SET_HF_TOKEN",
-    token,
-  });
+  if (!("serviceWorker" in navigator)) return;
+
+  const sendWithAck = (worker: ServiceWorker | null | undefined): Promise<void> => {
+    if (!worker) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      const channel = new MessageChannel();
+      let settled = false;
+      const timeout = window.setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      }, 800);
+
+      channel.port1.onmessage = () => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timeout);
+          resolve();
+        }
+      };
+
+      try {
+        worker.postMessage({ type: "SET_HF_TOKEN", token }, [channel.port2]);
+      } catch {
+        window.clearTimeout(timeout);
+        resolve();
+      }
+    });
+  };
+
+  const registration = await navigator.serviceWorker.ready;
+  await Promise.all([
+    sendWithAck(navigator.serviceWorker.controller),
+    sendWithAck(registration.active),
+    sendWithAck(registration.waiting),
+    sendWithAck(registration.installing),
+  ]);
 }
 
 async function fetchServerHfToken(): Promise<string | null> {
@@ -205,6 +236,11 @@ export class MediaPipeEngine implements InferenceEngine {
       // without allocating a single contiguous JS ArrayBuffer
       onProgress(50, "Loading model via streaming path (no progress available)...");
       try {
+        // Re-send token immediately before streaming load to avoid first-load SW races.
+        if (token) {
+          await sendTokenToServiceWorker(token);
+        }
+
         this.llm = await (LlmInference as any).createFromOptions(genai, {
           baseOptions: {
             modelAssetPath: modelUrl,
