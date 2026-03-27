@@ -21,14 +21,20 @@ function shouldForceStreamingLoader(modelUrl: string): boolean {
 
 /** Send the HF token to the service worker so it can inject auth headers on fetch */
 async function sendTokenToServiceWorker(token: string): Promise<void> {
-  if (!navigator.serviceWorker?.controller) {
-    // Wait briefly for SW to claim
-    await navigator.serviceWorker?.ready;
-  }
-  navigator.serviceWorker?.controller?.postMessage({
-    type: "SET_HF_TOKEN",
-    token,
-  });
+  if (!("serviceWorker" in navigator)) return;
+
+  const send = (worker: ServiceWorker | null | undefined) => {
+    worker?.postMessage({ type: "SET_HF_TOKEN", token });
+  };
+
+  // Send to current controller (if page is already controlled)
+  send(navigator.serviceWorker.controller);
+
+  // Also send to active/waiting/installing workers to cover first-load/update races
+  const registration = await navigator.serviceWorker.ready;
+  send(registration.active);
+  send(registration.waiting);
+  send(registration.installing);
 }
 
 async function fetchServerHfToken(): Promise<string | null> {
