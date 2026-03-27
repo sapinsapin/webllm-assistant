@@ -21,7 +21,7 @@ const CACHEABLE_EXTENSIONS = [
 // Auth token for gated HuggingFace models — injected via postMessage
 let hfToken = null;
 
-const HF_HOSTS = ["huggingface.co", "cdn-lfs.hf.co", "cdn-lfs-us-1.hf.co"];
+const HF_HOSTS = ["huggingface.co", "cdn-lfs.hf.co", "cdn-lfs-us-1.hf.co", "hf.co"];
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -31,10 +31,13 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Accept HF token from the main thread
+// Accept HF token from the main thread and acknowledge receipt when requested.
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SET_HF_TOKEN") {
     hfToken = event.data.token || null;
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({ ok: true });
+    }
   }
 });
 
