@@ -58,9 +58,9 @@ async function checkArrayBufferLimit(modelBytes: number): Promise<DiagnosticChec
     return {
       id: "arraybuffer",
       label: "Browser Buffer Limit",
-      status: "fail",
+      status: "warn",
       value: `${formatBytes(modelBytes)}`,
-      detail: `This model (${formatBytes(modelBytes)}) exceeds typical browser single-buffer limits (~${formatBytes(max)}). It will crash during download/load.`,
+      detail: `This model (${formatBytes(modelBytes)}) exceeds browser single-buffer limits (~${formatBytes(max)}). Will use streaming loader (no progress bar).`,
     };
   }
 
