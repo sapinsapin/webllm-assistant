@@ -8,9 +8,21 @@ function formatBytes(bytes: number): string {
 }
 
 // Browsers typically cannot allocate extremely large contiguous ArrayBuffers (often ~2GB-ish).
-// MediaPipe requires the full model as a single buffer, so we must hard-block above a safe limit
-// to avoid a tab crash with "Array buffer allocation failed".
+// For models below this limit, we download into a buffer for progress tracking.
+// For models above it, we use modelAssetPath to let MediaPipe's WASM stream directly to GPU.
 const MAX_MODEL_ARRAYBUFFER_BYTES = Math.floor(1.9 * 1024 * 1024 * 1024);
+
+/** Send the HF token to the service worker so it can inject auth headers on fetch */
+async function sendTokenToServiceWorker(token: string): Promise<void> {
+  if (!navigator.serviceWorker?.controller) {
+    // Wait briefly for SW to claim
+    await navigator.serviceWorker?.ready;
+  }
+  navigator.serviceWorker?.controller?.postMessage({
+    type: "SET_HF_TOKEN",
+    token,
+  });
+}
 
 async function fetchServerHfToken(): Promise<string | null> {
   try {
@@ -145,32 +157,73 @@ export class MediaPipeEngine implements InferenceEngine {
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
     );
 
-    let buffer: Uint8Array | null = await downloadWithProgress(modelUrl, hfToken || null, onProgress);
-
-    onProgress(100, "Initializing model (may take a minute)...");
-
     const isVision = options?.vision === true;
 
+    // Determine if the model is too large for JS ArrayBuffer download
+    // by doing a HEAD request first to check Content-Length
+    let usePath = false;
     try {
-      if (isVision) {
+      const token = hfToken || (await fetchServerHfToken());
+      const headHeaders: Record<string, string> = {};
+      if (token) headHeaders.Authorization = `Bearer ${token}`;
+      const headRes = await fetch(modelUrl, { method: "HEAD", headers: headHeaders });
+      if (headRes.ok) {
+        const contentLength = parseInt(headRes.headers.get("content-length") || "0", 10);
+        if (contentLength > MAX_MODEL_ARRAYBUFFER_BYTES) {
+          usePath = true;
+          onProgress(0, `Model is ${formatBytes(contentLength)} — using streaming loader to avoid memory limits...`);
+        }
+      }
+      // Send token to service worker for auth injection on modelAssetPath fetches
+      if (token) {
+        await sendTokenToServiceWorker(token);
+      }
+    } catch {
+      // HEAD failed — fall through to buffer download
+    }
+
+    if (usePath) {
+      // Use modelAssetPath: MediaPipe WASM streams the model directly to GPU
+      // without allocating a single contiguous JS ArrayBuffer
+      onProgress(50, "Loading model via streaming path (no progress available)...");
+      try {
         this.llm = await (LlmInference as any).createFromOptions(genai, {
           baseOptions: {
-            modelAssetBuffer: buffer,
+            modelAssetPath: modelUrl,
           },
-          maxTokens: 2048,
-          maxNumImages: 5,
-          topK: 40,
-          temperature: 0.8,
-          randomSeed: 101,
+          ...(isVision
+            ? { maxTokens: 2048, maxNumImages: 5, topK: 40, temperature: 0.8, randomSeed: 101 }
+            : {}),
         });
-        this.supportsVision = true;
-      } else {
-        this.llm = await LlmInference.createFromModelBuffer(genai, buffer);
-        this.supportsVision = false;
+        this.supportsVision = isVision;
+      } catch (err: any) {
+        throw new Error(`Failed to load model via streaming path: ${err?.message || err}`);
       }
-    } finally {
-      // Release the JS-side buffer immediately — model is now in GPU memory
-      buffer = null;
+    } else {
+      // Standard buffer download with progress tracking
+      let buffer: Uint8Array | null = await downloadWithProgress(modelUrl, hfToken || null, onProgress);
+      onProgress(100, "Initializing model (may take a minute)...");
+
+      try {
+        if (isVision) {
+          this.llm = await (LlmInference as any).createFromOptions(genai, {
+            baseOptions: {
+              modelAssetBuffer: buffer,
+            },
+            maxTokens: 2048,
+            maxNumImages: 5,
+            topK: 40,
+            temperature: 0.8,
+            randomSeed: 101,
+          });
+          this.supportsVision = true;
+        } else {
+          this.llm = await LlmInference.createFromModelBuffer(genai, buffer);
+          this.supportsVision = false;
+        }
+      } finally {
+        buffer = null;
+      }
     }
   }
 
