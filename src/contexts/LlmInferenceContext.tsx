@@ -271,30 +271,13 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
 
       const fullPrompt = engine.formatPrompt([{ role: "user", content: promptText }]);
 
-      // Estimate expected tokens and compute timeout at 0.1 tok/s threshold
-      const estimatedTokensPerRequest = Math.max(20, Math.ceil(promptText.split(/\s+/).length * 2));
-      const totalExpectedTokens = estimatedTokensPerRequest * concurrency;
-      const timeoutMs = (totalExpectedTokens / 0.1) * 1000; // e.g. 100 tokens → 1000s
-
       try {
         const start = performance.now();
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error(
-            `Concurrent benchmark timed out after ${(timeoutMs / 1000).toFixed(0)}s ` +
-            `(${totalExpectedTokens} expected tokens at 0.1 tok/s threshold)`
-          )), timeoutMs);
-        });
-
-        const benchPromise = (async () => {
-          const promises = Array.from({ length: concurrency }, () => engine.generateFull(fullPrompt));
-          return Promise.allSettled(promises);
-        })();
-
-        const results = await Promise.race([benchPromise, timeoutPromise]);
+        const promises = Array.from({ length: concurrency }, () => engine.generateFull(fullPrompt));
+        const results = await Promise.allSettled(promises);
         const end = performance.now();
 
-        const fulfilled = (results as PromiseSettledResult<import("@/lib/inference/types").GenerationResult>[])
+        const fulfilled = results
           .filter((r): r is PromiseFulfilledResult<import("@/lib/inference/types").GenerationResult> => r.status === "fulfilled")
           .map(r => r.value);
 
@@ -318,19 +301,6 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         };
       } catch (err) {
         console.error("Concurrent benchmark error:", err);
-        if (err instanceof Error && err.message.includes("timed out")) {
-          return {
-            modelName: currentModelName,
-            prompt: `${concurrency}× ${promptText}`,
-            category,
-            tokensGenerated: 0,
-            timeMs: timeoutMs,
-            tokensPerSecond: 0,
-            ttftMs: 0,
-            tpotMs: 0,
-            response: `Timed out — below 0.1 tok/s viability threshold`,
-          };
-        }
         return null;
       }
     },
