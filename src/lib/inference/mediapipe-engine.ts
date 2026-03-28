@@ -294,11 +294,25 @@ export class MediaPipeEngine implements InferenceEngine {
     if (!this.llm) throw new Error("Model not loaded");
 
     if (this.supportsVision && images && images.length > 0) {
+      // Convert data-URL images to blob object URLs that MediaPipe can fetch
+      const blobUrls: string[] = [];
+      const toObjectUrl = (dataUrl: string): string => {
+        const [header, b64] = dataUrl.split(",");
+        const mime = header.match(/:(.*?);/)?.[1] || "image/jpeg";
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+        blobUrls.push(url);
+        return url;
+      };
+
       // Build multimodal prompt array for vision models
       const multimodalInput: any[] = [];
       multimodalInput.push("<start_of_turn>user\n");
       for (const img of images) {
-        multimodalInput.push({ imageSource: img.dataUrl });
+        const objectUrl = toObjectUrl(img.dataUrl);
+        multimodalInput.push({ imageSource: objectUrl });
         multimodalInput.push("\n");
       }
       // Extract the user text from the formatted prompt (after the last user turn marker)
@@ -311,19 +325,24 @@ export class MediaPipeEngine implements InferenceEngine {
       multimodalInput.push(lastUserText);
       multimodalInput.push("<end_of_turn>\n<start_of_turn>model\n");
 
-      await new Promise<void>((resolve, reject) => {
-        try {
-          (this.llm as any).generateResponse(multimodalInput, (partial: string, done: boolean) => {
-            callbacks.onToken(partial);
-            if (done) {
-              callbacks.onComplete();
-              resolve();
-            }
-          });
-        } catch (err) {
-          reject(err);
-        }
-      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          try {
+            (this.llm as any).generateResponse(multimodalInput, (partial: string, done: boolean) => {
+              callbacks.onToken(partial);
+              if (done) {
+                callbacks.onComplete();
+                resolve();
+              }
+            });
+          } catch (err) {
+            reject(err);
+          }
+        });
+      } finally {
+        // Release blob URLs to free memory
+        blobUrls.forEach((u) => URL.revokeObjectURL(u));
+      }
     } else {
       await new Promise<void>((resolve, reject) => {
         try {
