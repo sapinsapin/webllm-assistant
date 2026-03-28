@@ -271,20 +271,51 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
 
       const fullPrompt = engine.formatPrompt([{ role: "user", content: promptText }]);
 
+      // Estimate expected tokens per request (~60) and compute timeout
+      // based on a minimum viability threshold of 0.1 tokens/second
+      const estimatedTokensPerRequest = 60;
+      const totalExpectedTokens = estimatedTokensPerRequest * concurrency;
+      const MIN_VIABLE_TPS = 0.1;
+      const timeoutMs = (totalExpectedTokens / MIN_VIABLE_TPS) * 1000;
+
       try {
         const start = performance.now();
         const promises = Array.from({ length: concurrency }, () => engine.generateFull(fullPrompt));
-        const results = await Promise.allSettled(promises);
-        const end = performance.now();
 
-        const fulfilled = results
+        const timeoutPromise = new Promise<"timeout">((resolve) =>
+          setTimeout(() => resolve("timeout"), timeoutMs)
+        );
+
+        const raceResult = await Promise.race([
+          Promise.allSettled(promises).then((r) => ({ type: "done" as const, results: r })),
+          timeoutPromise.then(() => ({ type: "timeout" as const, results: [] as PromiseSettledResult<import("@/lib/inference/types").GenerationResult>[] })),
+        ]);
+
+        const end = performance.now();
+        const wallTimeMs = end - start;
+        const isTimeout = raceResult.type === "timeout";
+
+        const fulfilled = raceResult.results
           .filter((r): r is PromiseFulfilledResult<import("@/lib/inference/types").GenerationResult> => r.status === "fulfilled")
           .map(r => r.value);
 
-        if (fulfilled.length === 0) return null;
+        if (fulfilled.length === 0) {
+          return {
+            modelName: currentModelName,
+            prompt: `${concurrency}× ${promptText}`,
+            category,
+            tokensGenerated: 0,
+            timeMs: wallTimeMs,
+            tokensPerSecond: 0,
+            ttftMs: 0,
+            tpotMs: 0,
+            response: isTimeout
+              ? `Timed out after ${Math.round(wallTimeMs / 1000)}s — below ${MIN_VIABLE_TPS} tok/s threshold`
+              : `0/${concurrency} completed`,
+          };
+        }
 
         const totalTokens = fulfilled.reduce((a, r) => a + r.tokenCount, 0);
-        const wallTimeMs = end - start;
         const avgTtft = fulfilled.reduce((a, r) => a + r.ttftMs, 0) / fulfilled.length;
         const avgTpot = fulfilled.reduce((a, r) => a + r.tpotMs, 0) / fulfilled.length;
 
@@ -297,7 +328,9 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           tokensPerSecond: totalTokens / (wallTimeMs / 1000),
           ttftMs: avgTtft,
           tpotMs: avgTpot,
-          response: `${fulfilled.length}/${concurrency} completed`,
+          response: isTimeout
+            ? `Timed out: ${fulfilled.length}/${concurrency} completed in ${Math.round(wallTimeMs / 1000)}s`
+            : `${fulfilled.length}/${concurrency} completed`,
         };
       } catch (err) {
         console.error("Concurrent benchmark error:", err);
