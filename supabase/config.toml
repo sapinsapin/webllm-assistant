@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.apollo-chat]
 verify_jwt = false
+
+[functions.eval-judge]
+verify_jwt = false

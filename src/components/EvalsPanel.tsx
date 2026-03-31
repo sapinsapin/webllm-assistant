@@ -3,6 +3,8 @@ import { useLlmInference } from "@/hooks/useLlmInference";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   EVAL_PROMPTS,
   EVAL_CATEGORIES,
@@ -11,11 +13,14 @@ import {
   type EvalRunSummary,
   scoreResponse,
   computeScore,
+  computeHybridScore,
   computeCategoryAccuracy,
 } from "@/lib/evals";
-import { Play, CheckCircle2, XCircle, Loader2, RotateCcw, Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Play, CheckCircle2, XCircle, Loader2, Download, Gavel } from "lucide-react";
+import { toast } from "sonner";
 
-type EvalStatus = "idle" | "running" | "done" | "error";
+type EvalStatus = "idle" | "running" | "judging" | "done" | "error";
 
 interface RowState {
   status: "idle" | "running" | "done" | "error";
@@ -30,6 +35,7 @@ export function EvalsPanel() {
   const [progress, setProgress] = useState(0);
   const [summary, setSummary] = useState<EvalRunSummary | null>(null);
   const [filterCat, setFilterCat] = useState<EvalCategory | "all">("all");
+  const [useJudge, setUseJudge] = useState(true);
   const abortRef = useRef(false);
 
   const runAll = useCallback(async () => {
@@ -76,6 +82,52 @@ export function EvalsPanel() {
     }
 
     setProgress(100);
+
+    // LLM-as-Judge pass
+    if (useJudge && scores.length > 0 && !abortRef.current) {
+      setOverallStatus("judging");
+      try {
+        const items = scores.map((s) => {
+          const ep = EVAL_PROMPTS.find((e) => e.id === s.evalId)!;
+          return {
+            prompt: ep.prompt,
+            expectedAnswer: ep.expectedAnswer,
+            modelResponse: s.response,
+            category: ep.category,
+          };
+        });
+
+        const { data, error } = await supabase.functions.invoke("eval-judge", {
+          body: { items },
+        });
+
+        if (error) throw error;
+
+        const results: { index: number; score: number; reasoning: string }[] = data?.results || [];
+        for (const r of results) {
+          const idx = r.index - 1;
+          if (idx >= 0 && idx < scores.length) {
+            scores[idx].judgeScore = r.score;
+            scores[idx].judgeReasoning = r.reasoning;
+            scores[idx].score = computeHybridScore(computeScore(scores[idx].breakdown), r.score);
+          }
+        }
+
+        // Update rows with judge data
+        for (let i = 0; i < EVAL_PROMPTS.length; i++) {
+          const s = scores.find((sc) => sc.evalId === EVAL_PROMPTS[i].id);
+          if (s && newRows[i].status === "done") {
+            newRows[i] = { ...newRows[i], score: s };
+          }
+        }
+        setRows([...newRows]);
+        toast.success("LLM judge scoring complete");
+      } catch (err) {
+        console.error("Judge error:", err);
+        toast.error("LLM judge failed, using keyword scores only");
+      }
+    }
+
     const catAcc = computeCategoryAccuracy(scores);
     const overall = scores.length > 0 ? scores.reduce((a, s) => a + s.score, 0) / scores.length : 0;
     const run: EvalRunSummary = {
@@ -85,10 +137,11 @@ export function EvalsPanel() {
       scores,
       overallAccuracy: Math.round(overall * 100) / 100,
       categoryAccuracy: catAcc,
+      usedJudge: useJudge,
     };
     setSummary(run);
     setOverallStatus("done");
-  }, [engineRef, currentModelName, activeEngine]);
+  }, [engineRef, currentModelName, activeEngine, useJudge]);
 
   const exportResults = useCallback(() => {
     if (!summary) return;
@@ -111,6 +164,9 @@ export function EvalsPanel() {
   const scoreBg = (s: number) =>
     s >= 0.85 ? "bg-green-400/10 border-green-400/20" : s >= 0.5 ? "bg-yellow-400/10 border-yellow-400/20" : "bg-red-400/10 border-red-400/20";
 
+  const judgeColor = (s: number) =>
+    s >= 4 ? "text-green-400" : s >= 3 ? "text-yellow-400" : "text-red-400";
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -120,7 +176,13 @@ export function EvalsPanel() {
             <h2 className="text-sm font-semibold text-foreground">Accuracy Evals</h2>
             <p className="text-xs text-muted-foreground">{EVAL_PROMPTS.length} prompts across {Object.keys(EVAL_CATEGORIES).length} categories</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch id="judge-toggle" checked={useJudge} onCheckedChange={setUseJudge} disabled={overallStatus === "running" || overallStatus === "judging"} />
+              <Label htmlFor="judge-toggle" className="text-xs text-muted-foreground flex items-center gap-1">
+                <Gavel className="h-3 w-3" /> LLM Judge
+              </Label>
+            </div>
             {summary && (
               <Button variant="outline" size="sm" onClick={exportResults}>
                 <Download className="h-3 w-3 mr-1" /> Export
@@ -128,11 +190,13 @@ export function EvalsPanel() {
             )}
             <Button
               size="sm"
-              onClick={overallStatus === "running" ? () => { abortRef.current = true; } : runAll}
+              onClick={overallStatus === "running" || overallStatus === "judging" ? () => { abortRef.current = true; } : runAll}
               disabled={!engineRef.current}
             >
               {overallStatus === "running" ? (
-                <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Stop</>
+                <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Running...</>
+              ) : overallStatus === "judging" ? (
+                <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Judging...</>
               ) : (
                 <><Play className="h-3 w-3 mr-1" /> Run Evals</>
               )}
@@ -140,8 +204,15 @@ export function EvalsPanel() {
           </div>
         </div>
 
-        {overallStatus === "running" && (
-          <Progress value={progress} className="h-1.5" />
+        {(overallStatus === "running" || overallStatus === "judging") && (
+          <div className="space-y-1">
+            <Progress value={progress} className="h-1.5" />
+            {overallStatus === "judging" && (
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Gavel className="h-3 w-3" /> Cloud LLM is judging responses...
+              </p>
+            )}
+          </div>
         )}
 
         {/* Summary bar */}
@@ -159,6 +230,11 @@ export function EvalsPanel() {
                 <p className={`text-sm font-mono font-semibold ${scoreColor(acc)}`}>{Math.round(acc * 100)}%</p>
               </div>
             ))}
+            {summary.usedJudge && (
+              <div className="text-center">
+                <span className="text-[10px] text-primary flex items-center gap-1"><Gavel className="h-2.5 w-2.5" /> Judge enabled</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -214,6 +290,15 @@ export function EvalsPanel() {
                         {row.score.breakdown.patternMatch !== null && ` · Pattern: ${row.score.breakdown.patternMatch ? "✓" : "✗"}`}
                         {" · "}{row.score.tokensGenerated} tok · {Math.round(row.score.timeMs)}ms
                       </p>
+                      {row.score.judgeScore !== undefined && (
+                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <Gavel className="h-2.5 w-2.5 text-primary" />
+                          Judge: <span className={`font-mono font-semibold ${judgeColor(row.score.judgeScore)}`}>{row.score.judgeScore}/5</span>
+                          {row.score.judgeReasoning && (
+                            <span className="text-foreground/40 ml-1">— {row.score.judgeReasoning}</span>
+                          )}
+                        </p>
+                      )}
                     </div>
                   )}
                   {row.status === "error" && (
