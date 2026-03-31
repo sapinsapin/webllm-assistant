@@ -210,6 +210,8 @@ const Index = () => {
               </div>
             </div>
           </>
+        ) : activeTab === "evals" ? (
+          <EvalsPanel />
         ) : (
           <BenchmarkPanel
             modelName={currentModelName}
