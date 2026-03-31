@@ -97,6 +97,16 @@ const Index = () => {
                 >
                   <BarChart3 className="h-3 w-3" /> Benchmark
                 </button>
+                <button
+                  onClick={() => setActiveTab("evals")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "evals"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <ClipboardCheck className="h-3 w-3" /> Evals
+                </button>
               </div>
 
               <div className="ml-auto flex items-center gap-3">
