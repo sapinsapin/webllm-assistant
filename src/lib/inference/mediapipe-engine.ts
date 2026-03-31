@@ -324,7 +324,6 @@ export class MediaPipeEngine implements InferenceEngine {
         multimodalInput.push({ imageSource: objectUrl });
         multimodalInput.push("\n");
       }
-      // Extract the user text from the formatted prompt (after the last user turn marker)
       const userTextMatch = prompt.match(/<start_of_turn>user\n([\s\S]*?)<end_of_turn>/g);
       const lastUserText = userTextMatch
         ? userTextMatch[userTextMatch.length - 1]
@@ -335,7 +334,7 @@ export class MediaPipeEngine implements InferenceEngine {
       multimodalInput.push("<end_of_turn>\n<start_of_turn>model\n");
 
       try {
-        await new Promise<void>((resolve, reject) => {
+        await this.enqueue(() => new Promise<void>((resolve, reject) => {
           try {
             (this.llm as any).generateResponse(multimodalInput, (partial: string, done: boolean) => {
               callbacks.onToken(partial);
@@ -347,13 +346,12 @@ export class MediaPipeEngine implements InferenceEngine {
           } catch (err) {
             reject(err);
           }
-        });
+        }));
       } finally {
-        // Release blob URLs to free memory
         blobUrls.forEach((u) => URL.revokeObjectURL(u));
       }
     } else {
-      await new Promise<void>((resolve, reject) => {
+      await this.enqueue(() => new Promise<void>((resolve, reject) => {
         try {
           this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
             callbacks.onToken(partial);
@@ -365,7 +363,7 @@ export class MediaPipeEngine implements InferenceEngine {
         } catch (err) {
           reject(err);
         }
-      });
+      }));
     }
   }
 
@@ -377,7 +375,7 @@ export class MediaPipeEngine implements InferenceEngine {
     let response = "";
     let firstTokenTime: number | null = null;
 
-    await new Promise<void>((resolve, reject) => {
+    await this.enqueue(() => new Promise<void>((resolve, reject) => {
       try {
         this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
           if (firstTokenTime === null) firstTokenTime = performance.now();
@@ -388,7 +386,7 @@ export class MediaPipeEngine implements InferenceEngine {
       } catch (err) {
         reject(err);
       }
-    });
+    }));
 
     const end = performance.now();
     const timeMs = end - start;
