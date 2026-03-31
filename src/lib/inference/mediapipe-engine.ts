@@ -180,6 +180,15 @@ export class MediaPipeEngine implements InferenceEngine {
   private llm: LlmInference | null = null;
   supportsVision = false;
 
+  /** Mutex: ensures only one generateResponse runs at a time */
+  private pending: Promise<unknown> = Promise.resolve();
+
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.pending.then(() => fn(), () => fn());
+    this.pending = next.catch(() => {});
+    return next;
+  }
+
   async load(
     modelUrl: string,
     onProgress: (pct: number, msg: string) => void,
