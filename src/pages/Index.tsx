@@ -11,7 +11,7 @@ import { C2CChat } from "@/components/C2CChat";
 import { EvalsPanel } from "@/components/EvalsPanel";
 import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft, ClipboardCheck } from "lucide-react";
 
-type Tab = "chat" | "benchmark" | "cloud" | "c2c";
+type Tab = "chat" | "benchmark" | "evals" | "cloud" | "c2c";
 
 const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
   mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
