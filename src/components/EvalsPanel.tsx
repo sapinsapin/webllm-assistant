@@ -35,7 +35,7 @@ export function EvalsPanel() {
   const [progress, setProgress] = useState(0);
   const [summary, setSummary] = useState<EvalRunSummary | null>(null);
   const [filterCat, setFilterCat] = useState<EvalCategory | "all">("all");
-  const [useJudge, setUseJudge] = useState(true);
+  const [useJudge, setUseJudge] = useState(false);
   const abortRef = useRef(false);
 
   const runAll = useCallback(async () => {
