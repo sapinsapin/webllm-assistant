@@ -8,9 +8,10 @@ import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
 import { CloudChat } from "@/components/CloudChat";
 import { C2CChat } from "@/components/C2CChat";
-import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft } from "lucide-react";
+import { EvalsPanel } from "@/components/EvalsPanel";
+import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft, ClipboardCheck } from "lucide-react";
 
-type Tab = "chat" | "benchmark" | "cloud" | "c2c";
+type Tab = "chat" | "benchmark" | "evals" | "cloud" | "c2c";
 
 const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
   mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
@@ -95,6 +96,16 @@ const Index = () => {
                   }`}
                 >
                   <BarChart3 className="h-3 w-3" /> Benchmark
+                </button>
+                <button
+                  onClick={() => setActiveTab("evals")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTab === "evals"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <ClipboardCheck className="h-3 w-3" /> Evals
                 </button>
               </div>
 
@@ -199,6 +210,8 @@ const Index = () => {
               </div>
             </div>
           </>
+        ) : activeTab === "evals" ? (
+          <EvalsPanel />
         ) : (
           <BenchmarkPanel
             modelName={currentModelName}
