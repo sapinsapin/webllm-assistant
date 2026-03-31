@@ -19,9 +19,9 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
+    const apiKey = Deno.env.get("APOLLO_INFERENCE_API_KEY");
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: "APOLLO_INFERENCE_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -37,7 +37,6 @@ serve(async (req) => {
       });
     }
 
-    // Batch all evals into a single LLM call for efficiency
     const evalBlock = items
       .map(
         (item, i) =>
@@ -63,24 +62,31 @@ Respond with ONLY a JSON array where each element has:
 
 Example: [{"index":1,"score":5,"reasoning":"Correct answer."}]`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const baseUrl =
+      Deno.env.get("APOLLO_INFERENCE_BASE_URL") ??
+      "https://apollo-inference-bridge.am1-aks.apolloglobal.net";
+    const model =
+      Deno.env.get("APOLLO_INFERENCE_MODEL") ?? "/models/gpt-oss-20b-balitanlp-cpt";
+
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: evalBlock },
         ],
+        stream: false,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
+      console.error("SapinSapinAI judge error:", response.status, errText);
 
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limited, try again later." }), {
@@ -88,15 +94,9 @@ Example: [{"index":1,"score":5,"reasoning":"Correct answer."}]`;
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required, add credits to workspace." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
 
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
-        status: 500,
+      return new Response(JSON.stringify({ error: `SapinSapinAI API error (${response.status})` }), {
+        status: response.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
