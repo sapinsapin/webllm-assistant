@@ -106,7 +106,10 @@ export function QuickStart({
   onRunConcurrent,
 }: QuickStartProps) {
   const navigate = useNavigate();
-  const model = getBestQuickStartModel(capabilities);
+  const [gemma4Mode, setGemma4Mode] = useState(false);
+  const gemma4Model = getGemma4Model(capabilities);
+  const defaultModel = getBestQuickStartModel(capabilities);
+  const model = gemma4Mode && gemma4Model ? gemma4Model : defaultModel;
   const engine = model?.engine || activeEngine || "onnx";
 
   const [phase, setPhase] = useState<Phase>(status === "ready" ? "ready_to_bench" : "idle");
