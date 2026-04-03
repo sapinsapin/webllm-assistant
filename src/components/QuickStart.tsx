@@ -448,7 +448,7 @@ export function QuickStart({
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold tracking-tight font-mono">
             <span className="text-primary glow-text">Can I</span>
-            <span className="text-foreground"> AI?</span>
+            <span className="text-foreground"> {gemma4Mode ? "Gemma 4?" : "AI?"}</span>
           </h1>
         </div>
 
