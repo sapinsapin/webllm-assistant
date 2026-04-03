@@ -135,6 +135,13 @@ export function getBestQuickStartModel(capabilities: { engine: EngineType; avail
   return null;
 }
 
+/** Returns the Gemma 4 E2B model preset if the device supports MediaPipe/WebGPU. */
+export function getGemma4Model(capabilities: { engine: EngineType; available: boolean }[]): ModelPreset | null {
+  const hasMediaPipe = capabilities.some(c => c.engine === "mediapipe" && c.available);
+  if (!hasMediaPipe) return null;
+  return PRESET_MODELS.find(m => m.id === "gemma-4-e2b") || null;
+}
+
 export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning" | "long_context" | "multi_turn" | "concurrent";
 
 export interface BenchmarkPrompt {
