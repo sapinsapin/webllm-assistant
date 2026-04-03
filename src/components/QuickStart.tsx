@@ -498,15 +498,30 @@ export function QuickStart({
   // --- IDLE / DOWNLOADING / BENCHMARKING SCREEN ---
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6 select-none">
-      {/* Logo */}
+      {/* Logo + Gemma 4 toggle */}
       <div className="text-center space-y-3">
         <h1 className="text-4xl font-bold tracking-tight font-mono">
           <span className="text-primary glow-text">Can I</span>
-          <span className="text-foreground"> AI?</span>
+          <span className="text-foreground"> {gemma4Mode ? "Gemma 4?" : "AI?"}</span>
         </h1>
         <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-          Paying too much for token-based AI?
+          {gemma4Mode
+            ? "Test Google's latest Gemma 4 E2B — multimodal, 128K context, on-device."
+            : "Paying too much for token-based AI?"}
         </p>
+        {gemma4Model && (
+          <button
+            onClick={() => setGemma4Mode(!gemma4Mode)}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-mono transition-all ${
+              gemma4Mode
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-border bg-secondary/30 text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+            }`}
+          >
+            <span className={`h-2 w-2 rounded-full transition-colors ${gemma4Mode ? "bg-primary" : "bg-muted-foreground/40"}`} />
+            {gemma4Mode ? "✨ Gemma 4 Mode" : "Try Gemma 4"}
+          </button>
+        )}
       </div>
 
       {/* Cost comparison pitch */}
