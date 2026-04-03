@@ -295,12 +295,24 @@ export class MediaPipeEngine implements InferenceEngine {
     this.supportsVision = false;
   }
 
+  /** Strip Gemma control tokens from generated output */
+  private cleanOutput(text: string): string {
+    return text
+      .replace(/<end_of_turn>/g, "")
+      .replace(/<start_of_turn>(?:user|model)\n?/g, "")
+      .replace(/<eos>/g, "")
+      .trimEnd();
+  }
+
   async generateStream(
     prompt: string,
     callbacks: InferenceCallbacks,
     images?: ImageAttachment[]
   ): Promise<void> {
     if (!this.llm) throw new Error("Model not loaded");
+
+    // Timeout: 120s for vision, 90s for text — if no tokens arrive, reject
+    const TIMEOUT_MS = (images && images.length > 0) ? 120_000 : 90_000;
 
     if (this.supportsVision && images && images.length > 0) {
       // Convert data-URL images to blob object URLs that MediaPipe can fetch
@@ -316,27 +328,34 @@ export class MediaPipeEngine implements InferenceEngine {
         return url;
       };
 
-      // Build multimodal prompt array for vision models
-      const multimodalInput: any[] = [];
-      multimodalInput.push("<start_of_turn>user\n");
-      for (const img of images) {
-        const objectUrl = toObjectUrl(img.dataUrl);
-        multimodalInput.push({ imageSource: objectUrl });
-        multimodalInput.push("\n");
-      }
+      // Extract plain user text from the last user turn in the formatted prompt
       const userTextMatch = prompt.match(/<start_of_turn>user\n([\s\S]*?)<end_of_turn>/g);
       const lastUserText = userTextMatch
         ? userTextMatch[userTextMatch.length - 1]
             .replace("<start_of_turn>user\n", "")
             .replace("<end_of_turn>", "")
+            .trim()
         : prompt;
+
+      // Build multimodal prompt array for vision models
+      const multimodalInput: any[] = [];
+      for (const img of images) {
+        const objectUrl = toObjectUrl(img.dataUrl);
+        multimodalInput.push({ imageSource: objectUrl });
+      }
       multimodalInput.push(lastUserText);
-      multimodalInput.push("<end_of_turn>\n<start_of_turn>model\n");
 
       try {
         await this.enqueue(() => new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            reject(new Error("Vision inference timed out — the model may not support this image format or size."));
+          }, TIMEOUT_MS);
+
           try {
+            let accumulated = "";
             (this.llm as any).generateResponse(multimodalInput, (partial: string, done: boolean) => {
+              clearTimeout(timer);
+              accumulated += partial;
               callbacks.onToken(partial);
               if (done) {
                 callbacks.onComplete();
@@ -344,6 +363,7 @@ export class MediaPipeEngine implements InferenceEngine {
               }
             });
           } catch (err) {
+            clearTimeout(timer);
             reject(err);
           }
         }));
@@ -352,8 +372,15 @@ export class MediaPipeEngine implements InferenceEngine {
       }
     } else {
       await this.enqueue(() => new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error("Inference timed out."));
+        }, TIMEOUT_MS);
+
         try {
+          let accumulated = "";
           this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
+            clearTimeout(timer);
+            accumulated += partial;
             callbacks.onToken(partial);
             if (done) {
               callbacks.onComplete();
@@ -361,6 +388,7 @@ export class MediaPipeEngine implements InferenceEngine {
             }
           });
         } catch (err) {
+          clearTimeout(timer);
           reject(err);
         }
       }));
@@ -387,6 +415,8 @@ export class MediaPipeEngine implements InferenceEngine {
         reject(err);
       }
     }));
+
+    response = this.cleanOutput(response);
 
     const end = performance.now();
     const timeMs = end - start;

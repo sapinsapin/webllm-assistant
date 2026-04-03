@@ -134,12 +134,21 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         let fullResponse = "";
         setMessages([...newMessages, { role: "assistant", content: "" }]);
 
+        // Tokens to strip from streamed output
+        const CONTROL_TOKENS = [/<end_of_turn>/g, /<start_of_turn>(?:user|model)\n?/g, /<eos>/g];
+        const cleanResponse = (text: string) => {
+          let cleaned = text;
+          for (const re of CONTROL_TOKENS) cleaned = cleaned.replace(re, "");
+          return cleaned;
+        };
+
         await engine.generateStream(prompt, {
           onToken: (token) => {
             fullResponse += token;
+            const cleaned = cleanResponse(fullResponse);
             setMessages([
               ...newMessages,
-              { role: "assistant", content: fullResponse },
+              { role: "assistant", content: cleaned },
             ]);
           },
           onComplete: () => {
