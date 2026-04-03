@@ -63,6 +63,18 @@ export const PRESET_MODELS: ModelPreset[] = [
     vision: true,
   },
 
+  // Gemma 4 models (MediaPipe, WebGPU, vision-capable)
+  {
+    id: "gemma-4-e2b",
+    name: "Gemma 4 E2B",
+    size: "~2.0GB",
+    url: "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.task",
+    description: "Gemma 4 E2B — multimodal (vision + text + audio). Next-gen reasoning & coding with 128K context.",
+    gated: true,
+    engine: "mediapipe",
+    vision: true,
+  },
+
   {
     id: "webllm-smollm2-360m",
     name: "SmolLM2 360M",
@@ -121,6 +133,13 @@ export function getBestQuickStartModel(capabilities: { engine: EngineType; avail
     if (model) return model;
   }
   return null;
+}
+
+/** Returns the Gemma 4 E2B model preset if the device supports MediaPipe/WebGPU. */
+export function getGemma4Model(capabilities: { engine: EngineType; available: boolean }[]): ModelPreset | null {
+  const hasMediaPipe = capabilities.some(c => c.engine === "mediapipe" && c.available);
+  if (!hasMediaPipe) return null;
+  return PRESET_MODELS.find(m => m.id === "gemma-4-e2b") || null;
 }
 
 export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning" | "long_context" | "multi_turn" | "concurrent";

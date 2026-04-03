@@ -8,7 +8,7 @@ import { getDeviceInfo } from "@/lib/deviceInfo";
 import { runDiagnostics, type DiagnosticReport, type DiagnosticCheck } from "@/lib/diagnostics";
 import type { ModelStatus, BenchmarkResult } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
-import { getBestQuickStartModel } from "@/lib/models";
+import { getBestQuickStartModel, getGemma4Model } from "@/lib/models";
 import { BENCHMARK_PROMPTS } from "@/lib/models";
 import { CommunityBenchmarks } from "@/components/CommunityBenchmarks";
 
@@ -106,7 +106,10 @@ export function QuickStart({
   onRunConcurrent,
 }: QuickStartProps) {
   const navigate = useNavigate();
-  const model = getBestQuickStartModel(capabilities);
+  const [gemma4Mode, setGemma4Mode] = useState(false);
+  const gemma4Model = getGemma4Model(capabilities);
+  const defaultModel = getBestQuickStartModel(capabilities);
+  const model = gemma4Mode && gemma4Model ? gemma4Model : defaultModel;
   const engine = model?.engine || activeEngine || "onnx";
 
   const [phase, setPhase] = useState<Phase>(status === "ready" ? "ready_to_bench" : "idle");
@@ -358,7 +361,7 @@ export function QuickStart({
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold tracking-tight font-mono">
             <span className="text-primary glow-text">Can I</span>
-            <span className="text-foreground"> AI?</span>
+            <span className="text-foreground"> {gemma4Mode ? "Gemma 4?" : "AI?"}</span>
           </h1>
         </div>
 
@@ -445,7 +448,7 @@ export function QuickStart({
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold tracking-tight font-mono">
             <span className="text-primary glow-text">Can I</span>
-            <span className="text-foreground"> AI?</span>
+            <span className="text-foreground"> {gemma4Mode ? "Gemma 4?" : "AI?"}</span>
           </h1>
         </div>
 
@@ -495,15 +498,30 @@ export function QuickStart({
   // --- IDLE / DOWNLOADING / BENCHMARKING SCREEN ---
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6 select-none">
-      {/* Logo */}
+      {/* Logo + Gemma 4 toggle */}
       <div className="text-center space-y-3">
         <h1 className="text-4xl font-bold tracking-tight font-mono">
           <span className="text-primary glow-text">Can I</span>
-          <span className="text-foreground"> AI?</span>
+          <span className="text-foreground"> {gemma4Mode ? "Gemma 4?" : "AI?"}</span>
         </h1>
         <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-          Paying too much for token-based AI?
+          {gemma4Mode
+            ? "Test Google's latest Gemma 4 E2B — multimodal, 128K context, on-device."
+            : "Paying too much for token-based AI?"}
         </p>
+        {gemma4Model && (
+          <button
+            onClick={() => setGemma4Mode(!gemma4Mode)}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-mono transition-all ${
+              gemma4Mode
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-border bg-secondary/30 text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+            }`}
+          >
+            <span className={`h-2 w-2 rounded-full transition-colors ${gemma4Mode ? "bg-primary" : "bg-muted-foreground/40"}`} />
+            {gemma4Mode ? "✨ Gemma 4 Mode" : "Try Gemma 4"}
+          </button>
+        )}
       </div>
 
       {/* Cost comparison pitch */}
