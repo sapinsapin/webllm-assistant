@@ -8,7 +8,7 @@ import { getDeviceInfo } from "@/lib/deviceInfo";
 import { runDiagnostics, type DiagnosticReport, type DiagnosticCheck } from "@/lib/diagnostics";
 import type { ModelStatus, BenchmarkResult } from "@/hooks/useLlmInference";
 import type { EngineType, EngineCapability } from "@/lib/inference/types";
-import { getBestQuickStartModel } from "@/lib/models";
+import { getBestQuickStartModel, getGemma4Model } from "@/lib/models";
 import { BENCHMARK_PROMPTS } from "@/lib/models";
 import { CommunityBenchmarks } from "@/components/CommunityBenchmarks";
 
