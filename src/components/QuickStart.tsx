@@ -512,14 +512,13 @@ export function QuickStart({
         {gemma4Model && (
           <button
             onClick={() => setGemma4Mode(!gemma4Mode)}
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-mono transition-all ${
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold font-mono transition-all animate-pulse hover:animate-none ${
               gemma4Mode
-                ? "border-primary/50 bg-primary/10 text-primary"
-                : "border-border bg-secondary/30 text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                ? "border-primary bg-primary/20 text-primary shadow-[0_0_12px_hsl(var(--primary)/0.4)]"
+                : "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20 hover:shadow-[0_0_12px_hsl(var(--primary)/0.3)]"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full transition-colors ${gemma4Mode ? "bg-primary" : "bg-muted-foreground/40"}`} />
-            {gemma4Mode ? "✨ Gemma 4 Mode" : "Try Gemma 4"}
+            {gemma4Mode ? "✨ Gemma 4 Mode" : "🔥 Try Gemma 4 — New!"}
           </button>
         )}
       </div>
