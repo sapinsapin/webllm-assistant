@@ -416,6 +416,8 @@ export class MediaPipeEngine implements InferenceEngine {
       }
     }));
 
+    response = this.cleanOutput(response);
+
     const end = performance.now();
     const timeMs = end - start;
     const ttftMs = firstTokenTime !== null ? firstTokenTime - start : timeMs;
