@@ -1,4 +1,5 @@
-import { User, Bot } from "lucide-react";
+import { useState, useCallback } from "react";
+import { User, Bot, Volume2, VolumeX } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 
 interface ChatMessageProps {
@@ -7,6 +8,28 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const canSpeak =
+    !isUser &&
+    message.content &&
+    typeof window !== "undefined" &&
+    "speechSynthesis" in window;
+
+  const toggleSpeak = useCallback(() => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    utterance.rate = 1;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+    setIsSpeaking(true);
+  }, [isSpeaking, message.content]);
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -48,6 +71,25 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </span>
           )}
         </p>
+
+        {/* Read aloud button for assistant messages */}
+        {canSpeak && (
+          <button
+            onClick={toggleSpeak}
+            className={`mt-2 inline-flex items-center gap-1.5 text-xs font-mono transition-colors ${
+              isSpeaking
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title={isSpeaking ? "Stop reading" : "Read aloud"}
+          >
+            {isSpeaking ? (
+              <><VolumeX className="h-3 w-3" /> Stop</>
+            ) : (
+              <><Volume2 className="h-3 w-3" /> Read aloud</>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
