@@ -1,5 +1,6 @@
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
-import type { InferenceEngine, InferenceCallbacks, GenerationResult, ImageAttachment } from "./types";
+import type { InferenceEngine, InferenceCallbacks, GenerationResult, ImageAttachment, AudioAttachment } from "./types";
+import { stripControlTokens } from "./sanitize";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -255,7 +256,7 @@ export class MediaPipeEngine implements InferenceEngine {
             modelAssetPath: modelUrl,
           },
           ...(isVision
-            ? { maxTokens: 2048, maxNumImages: 5, topK: 40, temperature: 0.8, randomSeed: 101 }
+            ? { maxTokens: 2048, maxNumImages: 5, supportAudio: true, topK: 40, temperature: 0.8, randomSeed: 101 }
             : {}),
         });
         this.supportsVision = isVision;
@@ -275,6 +276,7 @@ export class MediaPipeEngine implements InferenceEngine {
             },
             maxTokens: 2048,
             maxNumImages: 5,
+            supportAudio: true,
             topK: 40,
             temperature: 0.8,
             randomSeed: 101,
@@ -295,26 +297,46 @@ export class MediaPipeEngine implements InferenceEngine {
     this.supportsVision = false;
   }
 
-  /** Strip Gemma control tokens from generated output */
+  /** Strip Gemma/control tokens from generated output */
   private cleanOutput(text: string): string {
-    return text
-      .replace(/<end_of_turn>/g, "")
-      .replace(/<start_of_turn>(?:user|model)\n?/g, "")
-      .replace(/<eos>/g, "")
-      .trimEnd();
+    return stripControlTokens(text).trimEnd();
+  }
+
+  private async convertToMonoAudioBuffer(dataUrl: string): Promise<AudioBuffer> {
+    const response = await fetch(dataUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioContext = new AudioContext();
+    try {
+      const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      if (decoded.numberOfChannels === 1) return decoded;
+
+      const mono = audioContext.createBuffer(1, decoded.length, decoded.sampleRate);
+      const monoData = mono.getChannelData(0);
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        const channelData = decoded.getChannelData(ch);
+        for (let i = 0; i < decoded.length; i++) {
+          monoData[i] += channelData[i] / decoded.numberOfChannels;
+        }
+      }
+      return mono;
+    } finally {
+      await audioContext.close();
+    }
   }
 
   async generateStream(
     prompt: string,
     callbacks: InferenceCallbacks,
-    images?: ImageAttachment[]
+    images?: ImageAttachment[],
+    audios?: AudioAttachment[]
   ): Promise<void> {
     if (!this.llm) throw new Error("Model not loaded");
 
     // Timeout: 120s for vision, 90s for text — if no tokens arrive, reject
-    const TIMEOUT_MS = (images && images.length > 0) ? 120_000 : 90_000;
+    const hasMultimodal = Boolean((images && images.length > 0) || (audios && audios.length > 0));
+    const TIMEOUT_MS = hasMultimodal ? 120_000 : 90_000;
 
-    if (this.supportsVision && images && images.length > 0) {
+    if ((this.supportsVision && images && images.length > 0) || (audios && audios.length > 0)) {
       // Convert data-URL images to blob object URLs that MediaPipe can fetch
       const blobUrls: string[] = [];
       const toObjectUrl = (dataUrl: string): string => {
@@ -337,13 +359,22 @@ export class MediaPipeEngine implements InferenceEngine {
             .trim()
         : prompt;
 
-      // Build multimodal prompt array for vision models
+      // Build multimodal prompt array.
+      // MediaPipe docs specify an ordered array mixing text + imageSource/audioSource entries.
       const multimodalInput: any[] = [];
+      multimodalInput.push("<start_of_turn>user\n");
+      multimodalInput.push(lastUserText);
       for (const img of images) {
         const objectUrl = toObjectUrl(img.dataUrl);
         multimodalInput.push({ imageSource: objectUrl });
       }
-      multimodalInput.push(lastUserText);
+      if (audios?.length) {
+        for (const audio of audios) {
+          const monoAudioBuffer = await this.convertToMonoAudioBuffer(audio.dataUrl);
+          multimodalInput.push({ audioSource: monoAudioBuffer });
+        }
+      }
+      multimodalInput.push("<end_of_turn>\n<start_of_turn>model\n");
 
       try {
         await this.enqueue(() => new Promise<void>((resolve, reject) => {
@@ -356,7 +387,7 @@ export class MediaPipeEngine implements InferenceEngine {
             (this.llm as any).generateResponse(multimodalInput, (partial: string, done: boolean) => {
               clearTimeout(timer);
               accumulated += partial;
-              callbacks.onToken(partial);
+              callbacks.onToken(this.cleanOutput(partial));
               if (done) {
                 callbacks.onComplete();
                 resolve();
@@ -381,7 +412,7 @@ export class MediaPipeEngine implements InferenceEngine {
           this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
             clearTimeout(timer);
             accumulated += partial;
-            callbacks.onToken(partial);
+            callbacks.onToken(this.cleanOutput(partial));
             if (done) {
               callbacks.onComplete();
               resolve();

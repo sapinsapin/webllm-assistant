@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { User, Bot, Volume2, VolumeX } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
+import { stripControlTokens } from "@/lib/inference/sanitize";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -15,6 +16,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
     message.content &&
     typeof window !== "undefined" &&
     "speechSynthesis" in window;
+  const cleanContent = stripControlTokens(message.content || "");
 
   const toggleSpeak = useCallback(() => {
     if (isSpeaking) {
@@ -23,13 +25,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(message.content);
+    const utterance = new SpeechSynthesisUtterance(cleanContent);
     utterance.rate = 1;
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     window.speechSynthesis.speak(utterance);
     setIsSpeaking(true);
-  }, [isSpeaking, message.content]);
+  }, [isSpeaking, cleanContent]);
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -62,8 +64,15 @@ export function ChatMessage({ message }: ChatMessageProps) {
             ))}
           </div>
         )}
+        {message.audios && message.audios.length > 0 && (
+          <div className="mb-2 flex flex-col gap-2">
+            {message.audios.map((src, i) => (
+              <audio key={i} controls src={src} className="max-w-xs" />
+            ))}
+          </div>
+        )}
         <p className="whitespace-pre-wrap font-mono text-[13px]">
-          {message.content || (
+          {cleanContent || (
             <span className="inline-flex gap-1">
               <span className="h-2 w-2 rounded-full bg-primary animate-typing" />
               <span className="h-2 w-2 rounded-full bg-primary animate-typing" style={{ animationDelay: "0.2s" }} />

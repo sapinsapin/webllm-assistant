@@ -29,6 +29,12 @@ export interface ImageAttachment {
   dataUrl: string;
 }
 
+/** An audio attachment for multimodal prompts */
+export interface AudioAttachment {
+  /** Data URL (base64) */
+  dataUrl: string;
+}
+
 export interface InferenceEngine {
   readonly type: EngineType;
   readonly label: string;
@@ -47,7 +53,8 @@ export interface InferenceEngine {
   generateStream(
     prompt: string,
     callbacks: InferenceCallbacks,
-    images?: ImageAttachment[]
+    images?: ImageAttachment[],
+    audios?: AudioAttachment[]
   ): Promise<void>;
 
   generateFull(prompt: string): Promise<GenerationResult>;
