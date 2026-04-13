@@ -4,10 +4,12 @@ import {
   type InferenceEngine,
   type EngineCapability,
   type ImageAttachment,
+  type AudioAttachment,
   detectCapabilities,
   getBestEngine,
   createEngine,
 } from "@/lib/inference";
+import { stripControlTokens } from "@/lib/inference/sanitize";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "error";
 
@@ -15,6 +17,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   images?: string[];
+  audios?: string[];
 }
 
 export interface BenchmarkResult {
@@ -41,7 +44,7 @@ interface LlmInferenceContextValue {
   engineRef: React.RefObject<InferenceEngine | null>;
   loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType, visionEnabled?: boolean) => Promise<void>;
   unloadModel: () => void;
-  sendMessage: (userMessage: string, images?: string[]) => Promise<void>;
+  sendMessage: (userMessage: string, images?: string[], audios?: string[]) => Promise<void>;
   runBenchmarkPrompt: (promptText: string, category?: string) => Promise<BenchmarkResult | null>;
   runLongContextBenchmark: (promptText: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
   runMultiTurnBenchmark: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
@@ -114,13 +117,13 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const sendMessage = useCallback(
-    async (userMessage: string, images?: string[]) => {
+    async (userMessage: string, images?: string[], audios?: string[]) => {
       const engine = engineRef.current;
       if (!engine || isGenerating) return;
 
       const newMessages: ChatMessage[] = [
         ...messages,
-        { role: "user", content: userMessage, images },
+        { role: "user", content: userMessage, images, audios },
       ];
       setMessages(newMessages);
       setIsGenerating(true);
@@ -129,23 +132,16 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
 
       // Convert image data URLs to ImageAttachment format
       const imageAttachments: ImageAttachment[] | undefined = images?.map((dataUrl) => ({ dataUrl }));
+      const audioAttachments: AudioAttachment[] | undefined = audios?.map((dataUrl) => ({ dataUrl }));
 
       try {
         let fullResponse = "";
         setMessages([...newMessages, { role: "assistant", content: "" }]);
 
-        // Tokens to strip from streamed output
-        const CONTROL_TOKENS = [/<end_of_turn>/g, /<start_of_turn>(?:user|model)\n?/g, /<eos>/g];
-        const cleanResponse = (text: string) => {
-          let cleaned = text;
-          for (const re of CONTROL_TOKENS) cleaned = cleaned.replace(re, "");
-          return cleaned;
-        };
-
         await engine.generateStream(prompt, {
           onToken: (token) => {
             fullResponse += token;
-            const cleaned = cleanResponse(fullResponse);
+            const cleaned = stripControlTokens(fullResponse);
             setMessages([
               ...newMessages,
               { role: "assistant", content: cleaned },
@@ -154,7 +150,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           onComplete: () => {
             setIsGenerating(false);
           },
-        }, imageAttachments);
+        }, imageAttachments, audioAttachments);
       } catch (err: unknown) {
         console.error("Generation error:", err);
         const msg = err instanceof Error ? err.message : "Unknown error";

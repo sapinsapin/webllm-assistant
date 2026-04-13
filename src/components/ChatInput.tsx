@@ -1,8 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { SendHorizonal, ImagePlus, X, Mic, MicOff } from "lucide-react";
+import { SendHorizonal, ImagePlus, X, Mic, MicOff, AudioLines } from "lucide-react";
+
+type ChatAttachment = {
+  type: "image" | "audio";
+  dataUrl: string;
+};
 
 interface ChatInputProps {
-  onSend: (message: string, images?: string[]) => void;
+  onSend: (message: string, images?: string[], audios?: string[]) => void;
   disabled: boolean;
   supportsVision?: boolean;
   supportsVoice?: boolean;
@@ -10,10 +15,11 @@ interface ChatInputProps {
 
 export function ChatInput({ onSend, disabled, supportsVision, supportsVoice }: ChatInputProps) {
   const [value, setValue] = useState("");
-  const [imagePreview, setImagePreview] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
   const speechSupported =
@@ -93,15 +99,22 @@ export function ChatInput({ onSend, disabled, supportsVision, supportsVoice }: C
 
   const handleSubmit = () => {
     const trimmed = value.trim();
-    if ((!trimmed && imagePreview.length === 0) || disabled) return;
+    if ((!trimmed && attachments.length === 0) || disabled) return;
     // Stop listening on send
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
     }
-    onSend(trimmed || "Describe this image.", imagePreview.length > 0 ? imagePreview : undefined);
+    const images = attachments.filter((a) => a.type === "image").map((a) => a.dataUrl);
+    const audios = attachments.filter((a) => a.type === "audio").map((a) => a.dataUrl);
+
+    onSend(
+      trimmed || (images.length ? "Describe this image." : "Transcribe this audio."),
+      images.length ? images : undefined,
+      audios.length ? audios : undefined
+    );
     setValue("");
-    setImagePreview([]);
+    setAttachments([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -119,7 +132,7 @@ export function ChatInput({ onSend, disabled, supportsVision, supportsVoice }: C
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === "string") {
-          setImagePreview((prev) => [...prev, reader.result as string]);
+          setAttachments((prev) => [...prev, { type: "image", dataUrl: reader.result as string }]);
         }
       };
       reader.readAsDataURL(file);
@@ -127,24 +140,99 @@ export function ChatInput({ onSend, disabled, supportsVision, supportsVoice }: C
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removeImage = (index: number) => {
-    setImagePreview((prev) => prev.filter((_, i) => i !== index));
+  const convertToMonoWavDataUrl = async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const context = new AudioContext();
+
+    const encodeWav = (samples: Float32Array, sampleRate: number) => {
+      const bytesPerSample = 2;
+      const blockAlign = bytesPerSample;
+      const dataSize = samples.length * bytesPerSample;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+      const writeString = (offset: number, s: string) => {
+        for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+      };
+
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(8, "WAVE");
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * blockAlign, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, 16, true);
+      writeString(36, "data");
+      view.setUint32(40, dataSize, true);
+
+      let offset = 44;
+      for (let i = 0; i < samples.length; i++) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        offset += 2;
+      }
+      return new Blob([view], { type: "audio/wav" });
+    };
+
+    try {
+      const decoded = await context.decodeAudioData(arrayBuffer.slice(0));
+      const mono = new Float32Array(decoded.length);
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        const data = decoded.getChannelData(ch);
+        for (let i = 0; i < decoded.length; i++) mono[i] += data[i] / decoded.numberOfChannels;
+      }
+      const wavBlob = encodeWav(mono, decoded.sampleRate);
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read audio"));
+        reader.readAsDataURL(wavBlob);
+      });
+    } finally {
+      await context.close();
+    }
+  };
+
+  const handleAudioSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("audio/")) continue;
+      const dataUrl = await convertToMonoWavDataUrl(file).catch(() => null);
+      if (dataUrl) {
+        setAttachments((prev) => [...prev, { type: "audio", dataUrl }]);
+      }
+    }
+    if (audioInputRef.current) audioInputRef.current.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
     <div className="rounded-xl border border-border bg-card p-2">
       {/* Image previews */}
-      {imagePreview.length > 0 && (
+      {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-2 pb-2">
-          {imagePreview.map((src, i) => (
+          {attachments.map((item, i) => (
             <div key={i} className="relative group">
-              <img
-                src={src}
-                alt={`Attachment ${i + 1}`}
-                className="h-16 w-16 rounded-lg object-cover border border-border"
-              />
+              {item.type === "image" ? (
+                <img
+                  src={item.dataUrl}
+                  alt={`Attachment ${i + 1}`}
+                  className="h-16 w-16 rounded-lg object-cover border border-border"
+                />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-border bg-secondary/40 text-muted-foreground">
+                  <AudioLines className="h-4 w-4" />
+                </div>
+              )}
               <button
-                onClick={() => removeImage(i)}
+                onClick={() => removeAttachment(i)}
                 className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <X className="h-3 w-3" />
@@ -183,6 +271,26 @@ export function ChatInput({ onSend, disabled, supportsVision, supportsVoice }: C
             </button>
           </>
         )}
+        {supportsVoice && (
+          <>
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*"
+              multiple
+              onChange={handleAudioSelect}
+              className="hidden"
+            />
+            <button
+              onClick={() => audioInputRef.current?.click()}
+              disabled={disabled}
+              title="Attach audio"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition-all hover:text-foreground hover:bg-secondary disabled:opacity-30"
+            >
+              <AudioLines className="h-4 w-4" />
+            </button>
+          </>
+        )}
 
         {/* Voice input button */}
         {speechSupported && (
@@ -208,8 +316,12 @@ export function ChatInput({ onSend, disabled, supportsVision, supportsVoice }: C
           placeholder={
             speechSupported
               ? "Type or use 🎙️ voice..."
-              : supportsVision
-                ? "Type a message or attach an image..."
+              : (supportsVision && supportsVoice)
+                ? "Type a message or attach image/audio..."
+                : supportsVision
+                  ? "Type a message or attach an image..."
+                  : supportsVoice
+                    ? "Type a message or attach audio..."
                 : "Type a message..."
           }
           disabled={disabled}
@@ -218,7 +330,7 @@ export function ChatInput({ onSend, disabled, supportsVision, supportsVoice }: C
         />
         <button
           onClick={handleSubmit}
-          disabled={disabled || (!value.trim() && imagePreview.length === 0)}
+          disabled={disabled || (!value.trim() && attachments.length === 0)}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-all hover:opacity-90 disabled:opacity-30"
         >
           <SendHorizonal className="h-4 w-4" />

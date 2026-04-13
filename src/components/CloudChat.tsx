@@ -5,6 +5,7 @@ import { CloudBenchmark } from "@/components/CloudBenchmark";
 import { Cloud, AlertCircle, MessageSquare, BarChart3 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 import { supabase } from "@/integrations/supabase/client";
+import { stripControlTokens } from "@/lib/inference/sanitize";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
@@ -59,9 +60,9 @@ export function CloudChat() {
     }
   }, []);
 
-  const sendMessage = useCallback(async (input: string) => {
+  const sendMessage = useCallback(async (input: string, images?: string[], audios?: string[]) => {
     setError(null);
-    const userMsg: ChatMessageType = { role: "user", content: input };
+    const userMsg: ChatMessageType = { role: "user", content: input, images, audios };
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
     setIsLoading(true);
@@ -114,7 +115,7 @@ export function CloudChat() {
             if (content) {
               assistantContent += content;
               const snapshot = assistantContent;
-              setMessages([...updatedMessages, { role: "assistant", content: snapshot }]);
+              setMessages([...updatedMessages, { role: "assistant", content: stripControlTokens(snapshot) }]);
             }
           } catch {
             // partial JSON, put back
@@ -137,7 +138,7 @@ export function CloudChat() {
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               assistantContent += content;
-              setMessages([...updatedMessages, { role: "assistant", content: assistantContent }]);
+              setMessages([...updatedMessages, { role: "assistant", content: stripControlTokens(assistantContent) }]);
             }
           } catch { /* ignore */ }
         }

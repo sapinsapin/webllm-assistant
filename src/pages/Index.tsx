@@ -206,7 +206,12 @@ const Index = () => {
             </div>
             <div className="border-t border-border p-4">
               <div className="mx-auto max-w-3xl">
-                <ChatInput onSend={sendMessage} disabled={isGenerating} supportsVision={engineRef.current?.supportsVision} supportsVoice={status === "ready"} />
+                <ChatInput
+                  onSend={sendMessage}
+                  disabled={isGenerating}
+                  supportsVision={engineRef.current?.supportsVision}
+                  supportsVoice={engineRef.current?.supportsVision}
+                />
               </div>
             </div>
           </>

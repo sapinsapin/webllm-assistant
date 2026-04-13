@@ -8,6 +8,7 @@ import { useLlmInference } from "@/hooks/useLlmInference";
 import type { InferenceEngine } from "@/lib/inference/types";
 import { createEngine } from "@/lib/inference";
 import { getBestQuickStartModel } from "@/lib/models";
+import { stripControlTokens } from "@/lib/inference/sanitize";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
@@ -172,13 +173,13 @@ export function C2CChat() {
         }
       }
 
-      return assistantContent;
+      return stripControlTokens(assistantContent);
     },
     []
   );
 
   const sendLocalMessage = useCallback(
-    async (currentMessages: ChatMessageType[]): Promise<string> => {
+    async (currentMessages: ChatMessageType[], images?: string[], audios?: string[]): Promise<string> => {
       const engine = engineRef.current;
       if (!engine) throw new Error("Local engine not ready");
 
@@ -189,20 +190,20 @@ export function C2CChat() {
       await engine.generateStream(prompt, {
         onToken: (token) => {
           fullResponse += token;
-          setMessages([...updatedMessages, { role: "assistant", content: fullResponse }]);
+          setMessages([...updatedMessages, { role: "assistant", content: stripControlTokens(fullResponse) }]);
         },
         onComplete: () => {},
-      });
+      }, images?.map((dataUrl) => ({ dataUrl })), audios?.map((dataUrl) => ({ dataUrl })));
 
-      return fullResponse;
+      return stripControlTokens(fullResponse);
     },
     []
   );
 
   const sendMessage = useCallback(
-    async (input: string) => {
+    async (input: string, images?: string[], audios?: string[]) => {
       setError(null);
-      const userMsg: ChatMessageType = { role: "user", content: input };
+      const userMsg: ChatMessageType = { role: "user", content: input, images, audios };
       const updatedMessages = [...messages, userMsg];
       setMessages(updatedMessages);
       setIsLoading(true);
@@ -211,14 +212,19 @@ export function C2CChat() {
       const withPlaceholder = [...updatedMessages, { role: "assistant" as const, content: "" }];
       setMessages(withPlaceholder);
 
-      const useLocal = mode === "local" && localState === "ready" && engineRef.current;
+      const hasMultimodal = Boolean((images && images.length) || (audios && audios.length));
+      const canUseLocal = localState === "ready" && Boolean(engineRef.current);
+      const useLocal = (mode === "local" || hasMultimodal) && canUseLocal;
 
       try {
         let response: string;
         if (useLocal) {
-          response = await sendLocalMessage(withPlaceholder);
+          response = await sendLocalMessage(withPlaceholder, images, audios);
           setLocalRequests((p) => p + 1);
         } else {
+          if (hasMultimodal) {
+            throw new Error("Image/audio chat requires local Gemma model. Please wait for local model to finish loading.");
+          }
           response = await sendCloudMessage(input, withPlaceholder);
           setCloudRequests((p) => p + 1);
         }
@@ -359,7 +365,12 @@ export function C2CChat() {
 
           <div className="border-t border-border p-4">
             <div className="mx-auto max-w-3xl">
-              <ChatInput onSend={sendMessage} disabled={isLoading} />
+              <ChatInput
+                onSend={sendMessage}
+                disabled={isLoading}
+                supportsVision={engineRef.current?.supportsVision}
+                supportsVoice={engineRef.current?.supportsVision}
+              />
             </div>
           </div>
         </>
