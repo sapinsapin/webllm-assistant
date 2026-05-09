@@ -177,7 +177,7 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
             gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
             pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
             device_model: device.deviceModel, device_type: device.deviceType,
-            country: device.country, city: device.city,
+            country: device.country, city: device.city, latitude: device.latitude, longitude: device.longitude,
           });
         }
 
@@ -202,7 +202,7 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
             gpu: device.gpu, gpu_vendor: device.gpuVendor, screen_res: device.screenRes,
             pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
             device_model: device.deviceModel, device_type: device.deviceType,
-            country: device.country, city: device.city,
+            country: device.country, city: device.city, latitude: device.latitude, longitude: device.longitude,
           });
         }
 

@@ -136,6 +136,8 @@ export function CloudBenchmark() {
           device_type: device.deviceType,
           country: device.country,
           city: device.city,
+          latitude: device.latitude,
+          longitude: device.longitude,
         });
         toast.success("Cloud benchmark saved!");
       } catch (err) {

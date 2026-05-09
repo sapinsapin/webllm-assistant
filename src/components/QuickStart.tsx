@@ -325,6 +325,8 @@ export function QuickStart({
         device_type: deviceInfo.deviceType,
         country: deviceInfo.country,
         city: deviceInfo.city,
+        latitude: deviceInfo.latitude,
+        longitude: deviceInfo.longitude,
       }).select("id").single();
       if (data?.id) setLoadAttemptId(data.id);
     } catch (e) {
