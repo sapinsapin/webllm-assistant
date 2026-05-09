@@ -29,6 +29,8 @@ export type Database = {
           gpu: string | null
           gpu_vendor: string | null
           id: string
+          latitude: number | null
+          longitude: number | null
           model_name: string
           os: string | null
           pixel_ratio: number | null
@@ -52,6 +54,8 @@ export type Database = {
           gpu?: string | null
           gpu_vendor?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           model_name: string
           os?: string | null
           pixel_ratio?: number | null
@@ -75,6 +79,8 @@ export type Database = {
           gpu?: string | null
           gpu_vendor?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           model_name?: string
           os?: string | null
           pixel_ratio?: number | null

@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { BenchmarkSuite } from "@/components/BenchmarkSuite";
 import { Badge } from "@/components/ui/badge";
 import { useLlmInference } from "@/hooks/useLlmInference";
+import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
 
 interface PerPromptResult {
   prompt: string;
@@ -274,6 +275,9 @@ export default function Benchmarks() {
 
           {/* Runnable Test Suite */}
           <BenchmarkSuite onComplete={fetchRuns} />
+
+          {/* Geographic Heatmap */}
+          <BenchmarkHeatmap />
 
           {/* Historical Runs */}
           <section className="space-y-3">
