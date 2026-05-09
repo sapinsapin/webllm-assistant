@@ -176,6 +176,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
             pixel_ratio: device.pixelRatio, user_agent: device.userAgent,
             device_model: device.deviceModel, device_type: device.deviceType,
             country: device.country, city: device.city,
+            latitude: device.latitude, longitude: device.longitude,
           });
           if (error) console.error("Failed to save benchmark:", error);
           else onComplete?.();
