@@ -13,6 +13,8 @@ export interface DeviceInfo {
   deviceType: "desktop" | "mobile" | "tablet";
   country: string | null;
   city: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 function detectBrowser(): string {
@@ -92,14 +94,19 @@ function detectDeviceType(): "desktop" | "mobile" | "tablet" {
   return "desktop";
 }
 
-async function fetchGeoLocation(): Promise<{ country: string | null; city: string | null }> {
+async function fetchGeoLocation(): Promise<{ country: string | null; city: string | null; latitude: number | null; longitude: number | null }> {
   try {
     const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return { country: null, city: null };
+    if (!res.ok) return { country: null, city: null, latitude: null, longitude: null };
     const data = await res.json();
-    return { country: data.country_name ?? null, city: data.city ?? null };
+    return {
+      country: data.country_name ?? null,
+      city: data.city ?? null,
+      latitude: typeof data.latitude === "number" ? data.latitude : null,
+      longitude: typeof data.longitude === "number" ? data.longitude : null,
+    };
   } catch {
-    return { country: null, city: null };
+    return { country: null, city: null, latitude: null, longitude: null };
   }
 }
 
@@ -143,5 +150,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
     deviceType: detectDeviceType(),
     country: geo.country,
     city: geo.city,
+    latitude: geo.latitude,
+    longitude: geo.longitude,
   };
 }
