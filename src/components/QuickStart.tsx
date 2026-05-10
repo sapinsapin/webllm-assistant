@@ -807,7 +807,7 @@ export function QuickStart({
             className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
           >
             <Settings2 className="h-3 w-3" />
-            Advanced
+            Try other models
           </button>
         </div>
       )}
