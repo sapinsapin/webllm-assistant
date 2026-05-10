@@ -9,6 +9,7 @@ import { BenchmarkSuite } from "@/components/BenchmarkSuite";
 import { Badge } from "@/components/ui/badge";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
+import { FrugalFlops } from "@/components/FrugalFlops";
 
 interface PerPromptResult {
   prompt: string;
@@ -278,6 +279,9 @@ export default function Benchmarks() {
 
           {/* Geographic Heatmap */}
           <BenchmarkHeatmap />
+
+          {/* Frugal FLOPs — dark compute equivalence */}
+          <FrugalFlops />
 
           {/* Historical Runs */}
           <section className="space-y-3">
