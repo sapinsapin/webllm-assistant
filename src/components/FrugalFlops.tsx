@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Cpu, Zap, Server, TrendingUp, DollarSign } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import {
   estimateDeviceTflops,
   deviceFingerprint,
@@ -19,18 +20,21 @@ const H100_PRICE_USD = 30_000;
 export function FrugalFlops() {
   const [rows, setRows] = useState<RunRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [includeAll, setIncludeAll] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       // Pull just what we need to fingerprint devices. Exclude pure cloud runs.
-      const { data } = await supabase
+      let query = supabase
         .from("benchmark_runs")
         .select("device_model,device_type,gpu,gpu_vendor,ram_gb,cores,screen_res,pixel_ratio,engine,verdict")
         .not("engine", "in", "(cloud,c2c-cloud)")
-        .neq("verdict", "Did not finish")
-        .neq("verdict", "Crashed")
         .limit(5000);
+      if (!includeAll) {
+        query = query.neq("verdict", "Did not finish").neq("verdict", "Crashed");
+      }
+      const { data } = await query;
       if (cancelled) return;
       setRows((data as RunRow[]) || []);
       setLoading(false);
@@ -38,7 +42,7 @@ export function FrugalFlops() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [includeAll]);
 
   const stats = useMemo(() => {
     const seen = new Map<string, RunRow>();
@@ -91,6 +95,10 @@ export function FrugalFlops() {
         <span className="rounded border border-border bg-secondary/30 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
           dark compute index
         </span>
+        <label className="ml-auto flex items-center gap-2 text-[10px] font-mono text-muted-foreground cursor-pointer">
+          <span>include failed attempts</span>
+          <Switch checked={includeAll} onCheckedChange={setIncludeAll} />
+        </label>
       </div>
 
       <div className="rounded-lg border border-primary/30 bg-gradient-to-br from-primary/5 via-card to-card p-5 space-y-5">
