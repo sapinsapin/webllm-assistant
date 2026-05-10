@@ -11,6 +11,8 @@ import type { EngineType, EngineCapability } from "@/lib/inference/types";
 import { getBestQuickStartModel, getGemma4Model } from "@/lib/models";
 import { BENCHMARK_PROMPTS } from "@/lib/models";
 import { CommunityBenchmarks } from "@/components/CommunityBenchmarks";
+import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
+import { FrugalFlops } from "@/components/FrugalFlops";
 
 type Phase = "idle" | "downloading" | "ready_to_bench" | "benchmarking" | "done";
 
@@ -821,6 +823,14 @@ export function QuickStart({
           <div className="max-h-[280px] overflow-y-auto scrollbar-thin">
             <CommunityBenchmarks />
           </div>
+        </div>
+      )}
+
+      {/* Frugal FLOPs + Geographic Heatmap */}
+      {phase === "idle" && (
+        <div className="w-full max-w-4xl mt-8 space-y-6 px-2">
+          <FrugalFlops />
+          <BenchmarkHeatmap />
         </div>
       )}
     </div>
