@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Helmet } from "react-helmet-async";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Cpu, ArrowLeft, Zap, Timer, Gauge, Monitor, HardDrive,
@@ -237,6 +238,14 @@ export default function Benchmarks() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <Helmet>
+        <title>On-Device LLM Benchmarks — Community Leaderboard | Can I AI?</title>
+        <meta name="description" content="Browse community benchmarks for on-device LLMs. Compare tokens/sec, time-to-first-token and per-model performance across real devices." />
+        <link rel="canonical" href="https://www.caniaitest.com/benchmarks" />
+        <meta property="og:url" content="https://www.caniaitest.com/benchmarks" />
+        <meta property="og:title" content="On-Device LLM Benchmarks — Community Leaderboard" />
+        <meta property="og:description" content="Real-device tokens/sec and TTFT for Gemma, Llama, Phi and more — submitted by the community." />
+      </Helmet>
       <header className="flex items-center gap-2 border-b border-border px-6 py-3">
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <Cpu className="h-5 w-5 text-primary" />

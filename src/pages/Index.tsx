@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import { ModelLoader } from "@/components/ModelLoader";
 import { QuickStart } from "@/components/QuickStart";
@@ -44,6 +45,14 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <Helmet>
+        <title>Can I AI? — Run LLMs Locally | On-Device AI Benchmark</title>
+        <meta name="description" content="Test if your device can run Gemma, Llama and other LLMs locally in the browser. Free WebGPU benchmark measures tokens/sec on any device." />
+        <link rel="canonical" href="https://www.caniaitest.com/" />
+        <meta property="og:url" content="https://www.caniaitest.com/" />
+        <meta property="og:title" content="Can I AI? — Run LLMs Locally" />
+        <meta property="og:description" content="Free browser tool to benchmark on-device AI. Test Gemma locally and compare tokens/sec vs cloud APIs." />
+      </Helmet>
       {/* Header — hide in quick start mode for cleaner look, but show in cloud mode */}
       {!showQuickStart && (
         <header className="flex items-center gap-2 border-b border-border px-6 py-3">
