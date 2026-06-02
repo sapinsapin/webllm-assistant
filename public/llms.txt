@@ -1,0 +1,14 @@
+# Can I AI?
+
+> Benchmark and run on-device AI models directly in your browser. Test whether your device can run open-source LLMs (Gemma, Llama, Phi, SmolLM) locally via WebGPU and WASM, and see real-world performance from the community.
+
+Can I AI is a multi-engine on-device AI platform. It detects your hardware, estimates VRAM, runs open-source language models locally in the browser using MediaPipe (WebGPU) with WebLLM and Transformers.js (WASM) fallbacks, and measures tokens-per-second so you can see what your device is actually capable of. Includes a chat interface, accuracy evals, multimodal (vision) support, voice in/out, and a Cloud-to-Client mode that streams a cloud model while a local model loads.
+
+## Pages
+
+- [Home](/): Device detection, hybrid inference engine, chat with on-device models, quick benchmarks, and the global FrugalFlops heat map.
+- [Benchmarks](/benchmarks): Community benchmark feed with tokens-per-second, time-to-first-token, device fingerprinting, and per-model performance history.
+
+## Optional
+
+- [Lovable](https://lovable.dev): Platform this project is built on.
