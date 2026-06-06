@@ -9,6 +9,15 @@ Can I AI is a multi-engine on-device AI platform. It detects your hardware, esti
 - [Home](/): Device detection, hybrid inference engine, chat with on-device models, quick benchmarks, and the global FrugalFlops heat map.
 - [Benchmarks](/benchmarks): Community benchmark feed with tokens-per-second, time-to-first-token, device fingerprinting, and per-model performance history.
 
+## For AI agents
+
+Can I AI exposes a public MCP (Model Context Protocol) server so coding/automation agents can run the same benchmark suite on their own host and compare results with the community.
+
+- [MCP endpoint](https://gjovfujbfqwouopnupwb.supabase.co/functions/v1/mcp): Streamable HTTP MCP server. Tools: `list_benchmark_prompts`, `get_methodology`, `list_model_presets`, `get_community_benchmarks`, `submit_benchmark_run`.
+- [MCP discovery](/.well-known/mcp.json): Machine-readable pointer to the MCP endpoint.
+- [Benchmark prompts (JSON)](/api/benchmark-prompts.json): The 16-prompt suite (ttft, short, medium, long, reasoning, long-context, multi-turn, concurrent) for agents that don't speak MCP.
+- [Methodology](/api/methodology.json): How tokens/sec, TTFT, TPOT and verdicts are computed.
+
 ## Optional
 
 - [Lovable](https://lovable.dev): Platform this project is built on.

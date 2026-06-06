@@ -1,0 +1,27 @@
+{
+  "name": "Can I AI — Benchmark Methodology",
+  "version": "1.0.0",
+  "metrics": {
+    "tokens_per_second": "Decoded tokens / wall-clock generation time (s), measured per prompt and averaged across runs.",
+    "ttft_ms": "Time to first token: ms from prompt submission to the first decoded token (prefill latency).",
+    "tpot_ms": "Time per output token: average inter-token latency during the decode phase.",
+    "verdict": "One of: 'Excellent' (>=20 tps), 'Good' (>=10), 'Usable' (>=4), 'Slow' (>=1), 'Unusable' (<1) — applied to avg_tps across the suite."
+  },
+  "procedure": {
+    "runs_per_prompt": 3,
+    "warmup": "First run per prompt is discarded as warmup when computing averages.",
+    "categories": [
+      "ttft", "short", "medium", "long", "reasoning",
+      "long_context", "multi_turn", "concurrent"
+    ],
+    "concurrent": "Spawns N parallel generate() calls and measures wall-clock total throughput.",
+    "multi_turn": "Each turn re-formats full conversation; measures context-accumulation overhead.",
+    "long_context": "Prepends a ~300 word technical passage to the prompt; isolates prefill scaling."
+  },
+  "fields_submitted": [
+    "model_name", "engine", "avg_tps", "avg_ttft_ms", "verdict",
+    "browser", "os", "cores", "ram_gb", "gpu", "gpu_vendor",
+    "device_model", "device_type", "screen_res", "pixel_ratio",
+    "user_agent", "results"
+  ]
+}
