@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.eval-judge]
 verify_jwt = false
+
+[functions.mcp]
+verify_jwt = false
