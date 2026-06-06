@@ -1,0 +1,17 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/mcp-discovery.json",
+  "name": "can-i-ai",
+  "description": "Run the Can I AI on-device LLM benchmark suite on your own host and compare against the community.",
+  "version": "1.0.0",
+  "transport": "streamable-http",
+  "endpoint": "https://gjovfujbfqwouopnupwb.supabase.co/functions/v1/mcp",
+  "documentation": "https://www.caniaitest.com/llms.txt",
+  "auth": { "type": "none" },
+  "tools": [
+    "list_benchmark_prompts",
+    "get_methodology",
+    "list_model_presets",
+    "get_community_benchmarks",
+    "submit_benchmark_run"
+  ]
+}
