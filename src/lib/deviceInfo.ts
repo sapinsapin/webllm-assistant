@@ -85,13 +85,21 @@ function detectDeviceModel(gpu: string | null): string | null {
  *
  * Apple + WebGPU only expose `vendor:"apple"` and `architecture:"metal-3"`.
  * No chip name is available. We infer the *tier* (base / Pro / Max / Ultra)
- * from `navigator.hardwareConcurrency`, and *generation* (M1–M4) from the
+ * from `navigator.hardwareConcurrency`, and *generation* (M1–M5) from the
  * macOS major version embedded in the UA string. Both are heuristics — the
  * user can override in the Review step before submitting a benchmark.
  *
+ * Generation mapping (macOS major version → earliest plausible chip gen):
+ *   macOS 27+ (2026, Tahoe+1) → M5 era
+ *   macOS 26   (2025, Tahoe)   → M5 era (Apple jumped numbering to 26)
+ *   macOS 15   (2024, Sequoia) → M4 era
+ *   macOS 14   (2023, Sonoma)  → M3 era
+ *   macOS 13   (2022, Ventura) → M2 era
+ *   macOS 12   (2021, Monterey)→ M1 era
+ *
  * Core counts by tier (P+E cores):
- *   8  → base (M1/M2/M3 base, 4P+4E)
- *   10 → base M4 (4P+6E) OR M1 Max (8P+2E)   — disambiguated by generation
+ *   8     → base (M1/M2/M3 base, 4P+4E)
+ *   10    → base M4/M5 (4P+6E) OR M1 Max (8P+2E) — disambiguated by generation
  *   11–12 → Pro
  *   14–16 → Max
  *   20–24 → Ultra
@@ -104,21 +112,18 @@ function detectAppleSiliconModel(gpu: string | null): string {
 
   // Generation hint from macOS version (users may run older OS on newer chips,
   // so this is "earliest plausible generation", labelled as a guess).
-  //   macOS 15+ (Sequoia, Oct 2024) → M4 era
-  //   macOS 14   (Sonoma,  Sep 2023) → M3 era
-  //   macOS 13   (Ventura, Oct 2022) → M2 era
-  //   macOS 12   (Monterey)          → M1 era
-  let genGuess: "M1" | "M2" | "M3" | "M4" | null = null;
-  if (macMajor >= 26 || macMajor === 15) genGuess = "M4";
-  else if (macMajor === 14) genGuess = "M3";
-  else if (macMajor === 13) genGuess = "M2";
+  let genGuess: "M1" | "M2" | "M3" | "M4" | "M5" | null = null;
+  if (macMajor >= 26) genGuess = "M5";        // macOS 26 (Tahoe, 2025) and later
+  else if (macMajor === 15) genGuess = "M4";  // Sequoia, 2024
+  else if (macMajor === 14) genGuess = "M3";  // Sonoma, 2023
+  else if (macMajor === 13) genGuess = "M2";  // Ventura, 2022
   else if (macMajor === 12 || (macMajor === 10 && macMinor >= 16)) genGuess = "M1";
 
   let tier: "" | " Pro" | " Max" | " Ultra" = "";
   if (cores >= 20) tier = " Ultra";
   else if (cores >= 14) tier = " Max";
   else if (cores >= 11) tier = " Pro";
-  else if (cores === 10 && genGuess && genGuess !== "M1") tier = ""; // base M4 has 10 cores
+  else if (cores === 10 && genGuess && genGuess !== "M1") tier = ""; // base M4/M5 has 10 cores
   else if (cores === 10) tier = " Max"; // M1 Max also has 10 cores
   else tier = ""; // 8 cores = base
 
@@ -128,6 +133,7 @@ function detectAppleSiliconModel(gpu: string | null): string {
   // Fall back to old GPU-string sniffing if macOS version not parseable.
   if (gpu) {
     const g = gpu.toLowerCase();
+    if (g.includes("m5")) return `Mac (Apple M5${tier})`;
     if (g.includes("m4")) return `Mac (Apple M4${tier})`;
     if (g.includes("m3")) return `Mac (Apple M3${tier})`;
     if (g.includes("m2")) return `Mac (Apple M2${tier})`;
