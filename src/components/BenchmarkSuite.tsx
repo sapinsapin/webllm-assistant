@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Loader2, Play, RotateCcw, Zap, Timer, Gauge } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Loader2, Play, RotateCcw, Zap, Timer, Gauge, Pencil, Check } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceInfo, type DeviceInfo } from "@/lib/deviceInfo";
@@ -95,6 +95,9 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const [overrideRam, setOverrideRam] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [insertedId, setInsertedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const autoSubmittedRef = useRef(false);
 
   const noEngine = capabilities.length > 0 && !capabilities.some((c) => c.available);
 
@@ -163,7 +166,8 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
         toast({ title: `${v.emoji} ${v.label} — ${avgTps.toFixed(1)} tok/s`, description: v.description });
 
-        // Detect device for the review step — user must confirm before submission
+        // Detect device, then auto-submit immediately so no result is lost.
+        // Users can refine device/GPU/RAM afterwards via the "Edit details" button.
         try {
           const device = await getDeviceInfo();
           if (cancelled) return;
@@ -171,7 +175,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           setOverrideModel(device.deviceModel ?? "");
           setOverrideGpu(device.gpu ?? "");
           setOverrideRam(device.ram != null ? String(device.ram) : "");
-          setSubmitted(false);
+          if (!autoSubmittedRef.current) {
+            autoSubmittedRef.current = true;
+            void autoSubmit(device, agg, avgTps, avgTtft, v.label);
+          }
         } catch (detectErr) {
           console.error("Device detection failed:", detectErr);
         }
@@ -210,48 +217,89 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     setCurrentRun(0);
     setPendingDevice(null);
     setSubmitted(false);
+    setInsertedId(null);
+    setEditing(false);
+    autoSubmittedRef.current = false;
   };
 
-  const handleSubmit = async () => {
-    if (!pendingDevice || submitting || submitted) return;
+  // Auto-submit the detected result so nothing is lost if the user navigates away.
+  const autoSubmit = async (
+    device: DeviceInfo,
+    agg: AggregatedResult[],
+    avgTpsVal: number,
+    avgTtftVal: number,
+    verdictLabel: string,
+  ) => {
     setSubmitting(true);
-    const allResults = aggregated.flatMap(a => a.runs);
-    const v = getVerdict(avgTps);
-    const ramParsed = overrideRam.trim() === "" ? null : Number(overrideRam);
+    const allResults = agg.flatMap(a => a.runs);
     try {
-      const { error } = await supabase.from("benchmark_runs").insert({
-        model_name: allResults[0]?.modelName || "Unknown",
-        engine,
-        avg_tps: avgTps,
-        avg_ttft_ms: avgTtft,
-        verdict: v.label,
-        results: allResults.map((r) => ({
-          prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
-          timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
-        })),
-        browser: pendingDevice.browser, os: pendingDevice.os, cores: pendingDevice.cores,
-        ram_gb: Number.isFinite(ramParsed as number) ? ramParsed : null,
-        gpu: overrideGpu.trim() || null,
-        gpu_vendor: pendingDevice.gpuVendor,
-        screen_res: pendingDevice.screenRes,
-        pixel_ratio: pendingDevice.pixelRatio,
-        user_agent: pendingDevice.userAgent,
-        device_model: overrideModel.trim() || null,
-        device_type: pendingDevice.deviceType,
-        country: pendingDevice.country, city: pendingDevice.city,
-        latitude: pendingDevice.latitude, longitude: pendingDevice.longitude,
-      });
+      const { data, error } = await supabase
+        .from("benchmark_runs")
+        .insert({
+          model_name: allResults[0]?.modelName || "Unknown",
+          engine,
+          avg_tps: avgTpsVal,
+          avg_ttft_ms: avgTtftVal,
+          verdict: verdictLabel,
+          results: allResults.map((r) => ({
+            prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
+            timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
+          })),
+          browser: device.browser, os: device.os, cores: device.cores,
+          ram_gb: device.ram,
+          gpu: device.gpu,
+          gpu_vendor: device.gpuVendor,
+          screen_res: device.screenRes,
+          pixel_ratio: device.pixelRatio,
+          user_agent: device.userAgent,
+          device_model: device.deviceModel,
+          device_type: device.deviceType,
+          country: device.country, city: device.city,
+          latitude: device.latitude, longitude: device.longitude,
+        })
+        .select("id")
+        .single();
       if (error) {
         console.error("Failed to save benchmark:", error);
         toast({ title: "Couldn't save result", description: error.message, variant: "destructive" });
       } else {
+        setInsertedId(data?.id ?? null);
         setSubmitted(true);
-        toast({ title: "Submitted to community feed", description: "Thanks for sharing your result." });
+        toast({ title: "Submitted to community feed", description: "You can still edit your device info below." });
         onComplete?.();
       }
     } catch (saveErr) {
       console.error("Failed to persist benchmark:", saveErr);
       toast({ title: "Couldn't save result", description: saveErr instanceof Error ? saveErr.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Update the already-submitted row with the user's manual corrections.
+  const handleUpdateDetails = async () => {
+    if (!insertedId || submitting) return;
+    setSubmitting(true);
+    const ramParsed = overrideRam.trim() === "" ? null : Number(overrideRam);
+    try {
+      const { error } = await supabase
+        .from("benchmark_runs")
+        .update({
+          device_model: overrideModel.trim() || null,
+          gpu: overrideGpu.trim() || null,
+          ram_gb: Number.isFinite(ramParsed as number) ? ramParsed : null,
+        })
+        .eq("id", insertedId);
+      if (error) {
+        console.error("Failed to update benchmark:", error);
+        toast({ title: "Couldn't update", description: error.message, variant: "destructive" });
+      } else {
+        setEditing(false);
+        toast({ title: "Updated", description: "Your hardware details have been refined." });
+      }
+    } catch (updateErr) {
+      console.error("Failed to update benchmark:", updateErr);
+      toast({ title: "Couldn't update", description: updateErr instanceof Error ? updateErr.message : "Unknown error", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -327,12 +375,35 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
       {phase === "done" && pendingDevice && (
         <div className="border-b border-border px-4 py-4 space-y-3 bg-secondary/10">
           <div>
-            <h4 className="text-xs font-bold font-mono text-foreground">Review your hardware before publishing</h4>
+            <h4 className="text-xs font-bold font-mono text-foreground">
+              {submitted ? "Result published — refine your hardware details (optional)" : "Publishing your result…"}
+            </h4>
             <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-              Browsers hide most hardware info — confirm or correct these so your result is accurate in the community feed.
-              <span className="block mt-0.5">RAM is capped at 8 GB by browser privacy limits; please set your real RAM.</span>
+              Browsers hide most hardware info, so auto-detection may be off (e.g. RAM is capped at 8 GB).
+              Click <span className="font-semibold">Edit details</span> to correct the device, GPU, or RAM.
             </p>
           </div>
+
+          {/* Read-only summary */}
+          {!editing && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-mono">
+              <div className="rounded-md border border-border bg-card px-2.5 py-1.5">
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Device</div>
+                <div className="text-foreground truncate">{overrideModel || "—"}</div>
+              </div>
+              <div className="rounded-md border border-border bg-card px-2.5 py-1.5">
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">GPU / Chipset</div>
+                <div className="text-foreground truncate">{overrideGpu || "—"}</div>
+              </div>
+              <div className="rounded-md border border-border bg-card px-2.5 py-1.5">
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">RAM (GB)</div>
+                <div className="text-foreground">{overrideRam || "—"}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Edit form */}
+          {editing && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <label className="space-y-1">
               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Device</span>
@@ -341,7 +412,6 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
                 value={overrideModel}
                 onChange={(e) => setOverrideModel(e.target.value)}
                 placeholder="e.g. MacBook Pro M4 Max"
-                disabled={submitted}
                 className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
               />
             </label>
@@ -352,7 +422,6 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
                 value={overrideGpu}
                 onChange={(e) => setOverrideGpu(e.target.value)}
                 placeholder="e.g. Apple M4 Max"
-                disabled={submitted}
                 className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
               />
             </label>
@@ -365,23 +434,47 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
                 value={overrideRam}
                 onChange={(e) => setOverrideRam(e.target.value)}
                 placeholder="e.g. 64"
-                disabled={submitted}
                 className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
               />
             </label>
           </div>
+          )}
+
           <div className="flex items-center justify-end gap-2">
-            {submitted ? (
-              <span className="text-[11px] font-mono text-primary">✓ Submitted to community feed</span>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-mono font-semibold text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                {submitting ? "Submitting…" : "Submit to community"}
-              </button>
+            {!submitted && (
+              <span className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Saving result…
+              </span>
+            )}
+            {submitted && !editing && (
+              <>
+                <span className="text-[11px] font-mono text-primary">✓ Saved to community feed</span>
+                <button
+                  onClick={() => setEditing(true)}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/50 px-3 py-1.5 text-xs font-mono text-secondary-foreground transition-all hover:bg-secondary"
+                >
+                  <Pencil className="h-3 w-3" /> Edit details
+                </button>
+              </>
+            )}
+            {submitted && editing && (
+              <>
+                <button
+                  onClick={() => setEditing(false)}
+                  disabled={submitting}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/50 px-3 py-1.5 text-xs font-mono text-secondary-foreground transition-all hover:bg-secondary disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateDetails}
+                  disabled={submitting}
+                  className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-mono font-semibold text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  {submitting ? "Updating…" : "Save changes"}
+                </button>
+              </>
             )}
           </div>
         </div>
