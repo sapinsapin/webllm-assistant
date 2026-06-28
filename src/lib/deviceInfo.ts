@@ -135,6 +135,19 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
 
   const geo = await geoPromise;
 
+  // Browsers hide most GPU details on Apple Silicon — `architecture` is
+  // typically "metal-3" with no device name. Relabel to something humans
+  // recognise so the community feed doesn't show bare "metal-3".
+  const ua = navigator.userAgent;
+  const isAppleSilicon =
+    (gpuVendor?.toLowerCase() === "apple") ||
+    (ua.includes("Macintosh") && (gpu?.toLowerCase().startsWith("metal") ?? false)) ||
+    ua.includes("iPhone") || ua.includes("iPad");
+  if (isAppleSilicon && gpu && /^metal[-\s]?\d*/i.test(gpu)) {
+    const metalVer = gpu.match(/\d+/)?.[0];
+    gpu = metalVer ? `Apple Silicon GPU (Metal ${metalVer})` : "Apple Silicon GPU";
+  }
+
   return {
     browser: detectBrowser(),
     os: detectOS(),
