@@ -5,6 +5,8 @@ import { CloudBenchmark } from "@/components/CloudBenchmark";
 import { Cloud, AlertCircle, MessageSquare, BarChart3 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 import { supabase } from "@/integrations/supabase/client";
+import { createSseParser } from "@/lib/sse";
+import { toast } from "sonner";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
 
@@ -53,7 +55,12 @@ export function CloudChat() {
           .from("leads")
           .insert({ name, email, source: "cloud_chat" })
           .then(({ error }) => {
-            if (error) console.error("Failed to save lead:", error);
+            if (error) {
+              console.error("Failed to save lead:", error);
+              // Allow a retry on the next message instead of failing silently.
+              onboardingRef.current.saved = false;
+              toast.error("Couldn't save your signup details — we'll retry automatically.");
+            }
           });
       }
     }
@@ -86,61 +93,30 @@ export function CloudChat() {
 
       if (!resp.body) throw new Error("No response body");
 
-      // Stream SSE
+      // Stream SSE through the shared, tested parser (handles JSON split
+      // across chunks, CRLF, [DONE], and malformed events without stalling).
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      const parser = createSseParser();
       let assistantContent = "";
 
       setMessages([...updatedMessages, { role: "assistant", content: "" }]);
 
+      const applyDeltas = (deltas: string[]) => {
+        if (deltas.length === 0) return;
+        assistantContent += deltas.join("");
+        setMessages([...updatedMessages, { role: "assistant", content: assistantContent }]);
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let idx: number;
-        while ((idx = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const payload = line.slice(6).trim();
-          if (payload === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(payload);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              const snapshot = assistantContent;
-              setMessages([...updatedMessages, { role: "assistant", content: snapshot }]);
-            }
-          } catch {
-            // partial JSON, put back
-            buffer = line + "\n" + buffer;
-            break;
-          }
-        }
+        applyDeltas(parser.push(decoder.decode(value, { stream: true })));
       }
+      applyDeltas(parser.flush());
 
-      // Final flush
-      if (buffer.trim()) {
-        for (let raw of buffer.split("\n")) {
-          if (!raw) continue;
-          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-          if (!raw.startsWith("data: ")) continue;
-          const payload = raw.slice(6).trim();
-          if (payload === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(payload);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages([...updatedMessages, { role: "assistant", content: assistantContent }]);
-            }
-          } catch { /* ignore */ }
-        }
+      if (!assistantContent) {
+        throw new Error("The AI service returned an empty response. Please try again.");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";

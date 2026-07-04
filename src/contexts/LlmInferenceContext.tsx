@@ -6,8 +6,11 @@ import {
   type ImageAttachment,
   detectCapabilities,
   getBestEngine,
+  getFallbackChain,
   createEngine,
 } from "@/lib/inference";
+import { getSmallestModel } from "@/lib/models";
+import { toast } from "@/hooks/use-toast";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "error";
 
@@ -38,6 +41,8 @@ interface LlmInferenceContextValue {
   currentModelName: string;
   activeEngine: EngineType | null;
   capabilities: EngineCapability[];
+  /** Message of the most recent failed benchmark run (null once one succeeds). */
+  lastBenchmarkError: string | null;
   engineRef: React.RefObject<InferenceEngine | null>;
   loadModel: (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType, visionEnabled?: boolean) => Promise<void>;
   unloadModel: () => void;
@@ -59,48 +64,118 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   const [currentModelName, setCurrentModelName] = useState("");
   const [activeEngine, setActiveEngine] = useState<EngineType | null>(null);
   const [capabilities, setCapabilities] = useState<EngineCapability[]>([]);
+  const [lastBenchmarkError, setLastBenchmarkError] = useState<string | null>(null);
 
   const engineRef = useRef<InferenceEngine | null>(null);
 
-  // Detect capabilities on mount
+  // Detect capabilities on mount. Detection failure must not leave the app
+  // engine-less: fall back to the universally-available WASM engine and say so.
   useEffect(() => {
-    detectCapabilities().then((caps) => {
-      setCapabilities(caps);
-      const best = getBestEngine(caps);
-      setActiveEngine(best);
-    });
+    detectCapabilities()
+      .then((caps) => {
+        setCapabilities(caps);
+        const best = getBestEngine(caps);
+        setActiveEngine(best);
+      })
+      .catch((err) => {
+        console.error("Capability detection failed:", err);
+        setCapabilities([
+          { engine: "onnx", label: "Transformers.js (WASM)", available: true, priority: 3 },
+        ]);
+        setActiveEngine("onnx");
+        toast({
+          title: "Hardware detection failed",
+          description: "Falling back to the universal WASM engine. Performance may be reduced.",
+          variant: "destructive",
+        });
+      });
   }, []);
 
   const loadModel = useCallback(
     async (modelUrl: string, modelName?: string, hfToken?: string, engineOverride?: EngineType, visionEnabled?: boolean) => {
-      try {
-        const engineType = engineOverride || activeEngine || "mediapipe";
-        setStatus("loading");
-        setDownloadProgress(0);
-        setCurrentModelName(modelName || modelUrl.split("/").pop() || "Unknown");
+      const preferred = engineOverride || activeEngine || "mediapipe";
+      setStatus("loading");
+      setDownloadProgress(0);
 
-        const engine = createEngine(engineType);
-        engineRef.current = engine;
-        setActiveEngine(engineType);
-
-        setStatusMessage(`Starting ${engine.label}...`);
-
-        await engine.load(modelUrl, (pct, msg) => {
-          setDownloadProgress(Math.max(pct, 0));
-          setStatusMessage(msg);
-        }, hfToken, { vision: visionEnabled });
-
-        setStatus("ready");
-        setStatusMessage(`Model loaded via ${engine.label}`);
-      } catch (err: unknown) {
-        setStatus("error");
-        const msg = err instanceof Error ? err.message : "Failed to load model";
-        setStatusMessage(msg);
-        setDownloadProgress(0);
-        console.error("LLM load error:", err);
+      // Load plan: the requested engine/model first, then every other available
+      // engine (by priority) with its own smallest non-gated model. Model
+      // presets are engine-specific, so falling back across engines requires
+      // swapping the model too.
+      const attempts: { engine: EngineType; url: string; name: string; vision?: boolean }[] = [
+        {
+          engine: preferred,
+          url: modelUrl,
+          name: modelName || modelUrl.split("/").pop() || "Unknown",
+          vision: visionEnabled,
+        },
+      ];
+      for (const eng of getFallbackChain(capabilities, preferred)) {
+        if (eng === preferred) continue;
+        const fallbackModel = getSmallestModel(eng);
+        // Gated fallbacks would just fail again without a token — skip them.
+        if (fallbackModel && !fallbackModel.gated) {
+          attempts.push({ engine: eng, url: fallbackModel.url, name: fallbackModel.name });
+        }
       }
+
+      let lastErr: unknown = null;
+      for (let i = 0; i < attempts.length; i++) {
+        const attempt = attempts[i];
+        try {
+          setCurrentModelName(attempt.name);
+          setDownloadProgress(0);
+
+          const engine = createEngine(attempt.engine);
+          engineRef.current = engine;
+          setActiveEngine(attempt.engine);
+          setStatusMessage(
+            i === 0
+              ? `Starting ${engine.label}...`
+              : `Falling back to ${engine.label} with ${attempt.name}...`
+          );
+
+          await engine.load(attempt.url, (pct, msg) => {
+            setDownloadProgress(Math.max(pct, 0));
+            setStatusMessage(msg);
+          }, hfToken, { vision: attempt.vision });
+
+          setStatus("ready");
+          setStatusMessage(`Model loaded via ${engine.label}`);
+          if (i > 0) {
+            toast({
+              title: "Loaded on fallback engine",
+              description: `${attempts[0].name} failed on ${attempts[0].engine}. Using ${attempt.name} via ${engine.label} instead.`,
+            });
+          }
+          return;
+        } catch (err: unknown) {
+          lastErr = err;
+          console.error(`LLM load error on ${attempt.engine}:`, err);
+          engineRef.current = null;
+          const msg = err instanceof Error ? err.message : "Failed to load model";
+          if (i < attempts.length - 1) {
+            const next = attempts[i + 1];
+            setStatusMessage(`${attempt.engine} failed — trying ${next.engine}...`);
+            toast({
+              title: `${attempt.name} failed to load`,
+              description: `${msg} — falling back to ${next.name} (${next.engine}).`,
+            });
+          }
+        }
+      }
+
+      // Every attempt failed — this must be loudly visible, never silent.
+      const msg = lastErr instanceof Error ? lastErr.message : "Failed to load model";
+      setStatus("error");
+      setStatusMessage(msg);
+      setDownloadProgress(0);
+      toast({
+        title: "Could not load any AI engine",
+        description: msg,
+        variant: "destructive",
+      });
     },
-    [activeEngine]
+    [activeEngine, capabilities]
   );
 
   const unloadModel = useCallback(() => {
@@ -162,6 +237,9 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           ...newMessages,
           { role: "assistant", content: "Error generating response: " + msg },
         ]);
+      } finally {
+        // Guarantee the input is re-enabled even if an engine resolves
+        // without ever invoking onComplete.
         setIsGenerating(false);
       }
     },
@@ -171,7 +249,11 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   const runBenchmarkPrompt = useCallback(
     async (promptText: string, category: string = "general"): Promise<BenchmarkResult | null> => {
       const engine = engineRef.current;
-      if (!engine) return null;
+      if (!engine) {
+        setLastBenchmarkError("No model loaded");
+        return null;
+      }
+      setLastBenchmarkError(null);
 
       const fullPrompt = engine.formatPrompt([{ role: "user", content: promptText }]);
 
@@ -191,6 +273,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         };
       } catch (err) {
         console.error("Benchmark error:", err);
+        setLastBenchmarkError(err instanceof Error ? err.message : "Unknown error");
         return null;
       }
     },
@@ -200,7 +283,11 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   const runLongContextBenchmark = useCallback(
     async (promptText: string, context: string, category: string = "long_context"): Promise<BenchmarkResult | null> => {
       const engine = engineRef.current;
-      if (!engine) return null;
+      if (!engine) {
+        setLastBenchmarkError("No model loaded");
+        return null;
+      }
+      setLastBenchmarkError(null);
 
       const combinedPrompt = `${context}\n\n${promptText}`;
       const fullPrompt = engine.formatPrompt([{ role: "user", content: combinedPrompt }]);
@@ -220,6 +307,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         };
       } catch (err) {
         console.error("Long context benchmark error:", err);
+        setLastBenchmarkError(err instanceof Error ? err.message : "Unknown error");
         return null;
       }
     },
@@ -229,7 +317,11 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   const runMultiTurnBenchmark = useCallback(
     async (turns: string[], category: string = "multi_turn"): Promise<BenchmarkResult | null> => {
       const engine = engineRef.current;
-      if (!engine) return null;
+      if (!engine) {
+        setLastBenchmarkError("No model loaded");
+        return null;
+      }
+      setLastBenchmarkError(null);
 
       try {
         const conversation: Array<{ role: "user" | "assistant"; content: string }> = [];
@@ -267,6 +359,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         };
       } catch (err) {
         console.error("Multi-turn benchmark error:", err);
+        setLastBenchmarkError(err instanceof Error ? err.message : "Unknown error");
         return null;
       }
     },
@@ -276,7 +369,11 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
   const runConcurrentBenchmark = useCallback(
     async (promptText: string, concurrency: number, category: string = "concurrent"): Promise<BenchmarkResult | null> => {
       const engine = engineRef.current;
-      if (!engine) return null;
+      if (!engine) {
+        setLastBenchmarkError("No model loaded");
+        return null;
+      }
+      setLastBenchmarkError(null);
 
       const fullPrompt = engine.formatPrompt([{ role: "user", content: promptText }]);
 
@@ -343,6 +440,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         };
       } catch (err) {
         console.error("Concurrent benchmark error:", err);
+        setLastBenchmarkError(err instanceof Error ? err.message : "Unknown error");
         return null;
       }
     },
@@ -358,6 +456,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
     currentModelName,
     activeEngine,
     capabilities,
+    lastBenchmarkError,
     engineRef,
     loadModel,
     unloadModel,

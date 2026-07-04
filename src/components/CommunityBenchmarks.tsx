@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, AlertCircle, RotateCcw } from "lucide-react";
 import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin, HardDrive, MemoryStick } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -62,35 +63,64 @@ function deviceLabel(run: BenchRun): string {
 
 const PAGE_SIZE = 10;
 
+/** Fetch one page of community runs. Throws on error so React Query can retry
+ * and surface a real error state — an error must never render as "no runs". */
+async function fetchBenchmarkPage(page: number): Promise<{ runs: BenchRun[]; totalCount: number }> {
+  const from = page * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  const { data, count, error } = await supabase
+    .from("benchmark_runs")
+    .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, to);
+  if (error) throw new Error(error.message);
+  return { runs: (data as BenchRun[]) ?? [], totalCount: count ?? 0 };
+}
+
 export function CommunityBenchmarks() {
-  const [runs, setRuns] = useState<BenchRun[]>([]);
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    setLoading(true);
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    supabase
-      .from("benchmark_runs")
-      .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to)
-      .then(({ data, count }) => {
-        setRuns((data as BenchRun[]) ?? []);
-        setTotalCount(count ?? 0);
-        setLoading(false);
-      });
-  }, [page]);
+  // React Query handles retries, deduping, and out-of-order responses —
+  // keepPreviousData means flipping pages never flashes stale/empty content.
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ["benchmark_runs", page],
+    queryFn: () => fetchBenchmarkPage(page),
+    placeholderData: keepPreviousData,
+    retry: 2,
+    staleTime: 30_000,
+  });
 
-  if (loading) {
+  const runs = data?.runs ?? [];
+  const totalCount = data?.totalCount ?? 0;
+
+  if (isPending) {
     return (
       <div className="space-y-3">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="h-16 rounded-lg bg-secondary/30 animate-pulse" />
         ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <AlertCircle className="h-6 w-6 text-destructive" />
+        <div>
+          <p className="text-sm font-medium text-destructive">Couldn't load community results</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {error instanceof Error ? error.message : "Network or server error"}
+          </p>
+        </div>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/50 px-3 py-1.5 text-xs font-mono text-secondary-foreground transition-colors hover:bg-secondary disabled:opacity-50"
+        >
+          <RotateCcw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} /> Try again
+        </button>
       </div>
     );
   }

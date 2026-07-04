@@ -70,9 +70,13 @@ export class WebLLMEngine implements InferenceEngine {
   }
 
   formatPrompt(messages: Array<{ role: "user" | "assistant"; content: string }>): string {
-    // WebLLM handles prompt formatting internally via OpenAI-compatible API
-    // Return the last user message; the engine manages conversation history
-    const last = messages.filter((m) => m.role === "user").pop();
-    return last?.content ?? "";
+    // The MLC engine does NOT retain history between chat.completions.create
+    // calls (each call sends a fresh messages array), so the full conversation
+    // must be serialized into the single user turn we send.
+    if (messages.length <= 1) return messages[0]?.content ?? "";
+    const transcript = messages
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+      .join("\n\n");
+    return `Continue this conversation as the Assistant. Reply with the Assistant's next message only.\n\n${transcript}\n\nAssistant:`;
   }
 }

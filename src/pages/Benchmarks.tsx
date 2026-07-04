@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Helmet } from "react-helmet-async";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Cpu, ArrowLeft, Zap, Timer, Gauge, Monitor, HardDrive,
-  ChevronDown, ChevronRight, ChevronLeft,
+  ChevronDown, ChevronRight, ChevronLeft, AlertCircle, RotateCcw,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BenchmarkSuite } from "@/components/BenchmarkSuite";
@@ -209,32 +210,36 @@ function RunCard({ run }: { run: BenchmarkRun }) {
 
 const PAGE_SIZE = 10;
 
+async function fetchRunsPage(page: number): Promise<{ runs: BenchmarkRun[]; totalCount: number }> {
+  const from = page * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  const { data, count, error } = await supabase
+    .from("benchmark_runs")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, to);
+  if (error) throw new Error(error.message);
+  return { runs: (data as unknown as BenchmarkRun[]) || [], totalCount: count ?? 0 };
+}
+
 export default function Benchmarks() {
   const { status, currentModelName } = useLlmInference();
-  const [runs, setRuns] = useState<BenchmarkRun[]>([]);
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchRuns = () => {
-    setLoading(true);
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    supabase
-      .from("benchmark_runs")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to)
-      .then(({ data, count }) => {
-        setRuns((data as unknown as BenchmarkRun[]) || []);
-        setTotalCount(count ?? 0);
-        setLoading(false);
-      });
-  };
+  // React Query: retries, no stale-page races on fast pagination, and a real
+  // error state instead of a misleading "no runs yet" on failure.
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ["benchmark_runs_page", page],
+    queryFn: () => fetchRunsPage(page),
+    placeholderData: keepPreviousData,
+    retry: 2,
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    fetchRuns();
-  }, [page]);
+  const runs = data?.runs ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const loading = isPending;
+  const fetchRuns = refetch;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -284,7 +289,7 @@ export default function Benchmarks() {
           </div>
 
           {/* Runnable Test Suite */}
-          <BenchmarkSuite onComplete={fetchRuns} />
+          <BenchmarkSuite onComplete={() => fetchRuns()} />
 
           {/* Geographic Heatmap */}
           <BenchmarkHeatmap />
@@ -307,6 +312,21 @@ export default function Benchmarks() {
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <p className="text-sm text-muted-foreground font-mono animate-pulse">Loading...</p>
+              </div>
+            ) : isError ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-lg border border-dashed border-destructive/40">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+                <p className="text-sm text-destructive font-mono">Couldn't load benchmark runs</p>
+                <p className="text-xs text-muted-foreground font-mono">
+                  {error instanceof Error ? error.message : "Network or server error"}
+                </p>
+                <button
+                  onClick={() => refetch()}
+                  disabled={isFetching}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/50 px-3 py-1.5 text-xs font-mono text-secondary-foreground transition-colors hover:bg-secondary disabled:opacity-50"
+                >
+                  <RotateCcw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} /> Try again
+                </button>
               </div>
             ) : runs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-lg border border-dashed border-border">

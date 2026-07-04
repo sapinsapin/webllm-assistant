@@ -50,3 +50,19 @@ export function getBestEngine(caps: EngineCapability[]): EngineType {
     .sort((a, b) => a.priority - b.priority);
   return available[0]?.engine ?? "onnx";
 }
+
+/**
+ * Ordered load-attempt chain: the preferred engine first, then every other
+ * available engine by priority. ONNX/WASM is always appended as the last
+ * resort since it works without WebGPU — even when capability detection
+ * failed and `caps` is empty, callers still get a usable fallback path.
+ */
+export function getFallbackChain(caps: EngineCapability[], preferred: EngineType): EngineType[] {
+  const ordered = caps
+    .filter((c) => c.available)
+    .sort((a, b) => a.priority - b.priority)
+    .map((c) => c.engine);
+  const chain: EngineType[] = [preferred, ...ordered.filter((e) => e !== preferred)];
+  if (!chain.includes("onnx")) chain.push("onnx");
+  return chain;
+}
