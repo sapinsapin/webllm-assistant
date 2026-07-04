@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Cpu, Zap, Server, TrendingUp, DollarSign } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -18,14 +19,13 @@ interface RunRow extends DeviceLike {
 const H100_PRICE_USD = 30_000;
 
 export function FrugalFlops() {
-  const [rows, setRows] = useState<RunRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [includeAll, setIncludeAll] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // Pull just what we need to fingerprint devices. Exclude pure cloud runs.
+  // Pull just what we need to fingerprint devices. Exclude pure cloud runs.
+  // A fetch error renders an error state, never a silently-zeroed index.
+  const { data: rows = [], isPending: loading, isError, refetch, isFetching } = useQuery({
+    queryKey: ["benchmark_runs_flops", includeAll],
+    queryFn: async (): Promise<RunRow[]> => {
       let query = supabase
         .from("benchmark_runs")
         .select("device_model,device_type,gpu,gpu_vendor,ram_gb,cores,screen_res,pixel_ratio,engine,verdict")
@@ -34,15 +34,13 @@ export function FrugalFlops() {
       if (!includeAll) {
         query = query.neq("verdict", "Did not finish").neq("verdict", "Crashed");
       }
-      const { data } = await query;
-      if (cancelled) return;
-      setRows((data as RunRow[]) || []);
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [includeAll]);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return (data as RunRow[]) || [];
+    },
+    retry: 2,
+    staleTime: 60_000,
+  });
 
   const stats = useMemo(() => {
     const seen = new Map<string, RunRow>();
@@ -79,6 +77,21 @@ export function FrugalFlops() {
     return (
       <section className="rounded-lg border border-border bg-card p-6">
         <p className="text-sm font-mono text-muted-foreground animate-pulse">Tallying dark compute…</p>
+      </section>
+    );
+  }
+
+  if (isError) {
+    return (
+      <section className="rounded-lg border border-border bg-card p-6 flex items-center gap-3">
+        <p className="text-sm font-mono text-destructive">Couldn't load compute index data.</p>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="rounded-md border border-border bg-secondary/50 px-2.5 py-1 text-[11px] font-mono text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+        >
+          Try again
+        </button>
       </section>
     );
   }
