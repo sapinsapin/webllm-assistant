@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { Semaphore } from "../_shared/semaphore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,6 +64,12 @@ const MAX_MESSAGES = 50;
 const MAX_MESSAGE_LENGTH = 4000;
 const VALID_ROLES = new Set(["user", "assistant"]);
 
+// Bound concurrent upstream streams per isolate so a burst of simultaneous
+// users degrades gracefully (brief queueing, then 503 + Retry-After) instead
+// of piling unbounded requests onto the inference bridge. Sized comfortably
+// above the 10-concurrent-user target.
+const upstreamSemaphore = new Semaphore(12, 24);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -116,8 +123,6 @@ serve(async (req) => {
       });
     }
 
-    quota.usedTokens += inputTokens;
-
     const apiKey = Deno.env.get("APOLLO_INFERENCE_API_KEY");
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "SAPINSAPINAI_INFERENCE_API_KEY not configured" }), {
@@ -126,32 +131,58 @@ serve(async (req) => {
       });
     }
 
+    const acquired = await upstreamSemaphore.acquire();
+    if (!acquired) {
+      return new Response(JSON.stringify({ error: "Chat is at capacity, please retry shortly." }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "5" },
+      });
+    }
+    // The slot is held for the lifetime of the upstream stream; release
+    // exactly once on completion, error, or client cancel.
+    let released = false;
+    const releaseSlot = () => {
+      if (!released) {
+        released = true;
+        upstreamSemaphore.release();
+      }
+    };
+
+    quota.usedTokens += inputTokens;
+
     const baseUrl =
       Deno.env.get("APOLLO_INFERENCE_BASE_URL") ??
       "https://apollo-inference-bridge.am1-aks.apolloglobal.net";
     const model =
       Deno.env.get("APOLLO_INFERENCE_MODEL") ?? "/models/gpt-oss-20b-balitanlp-cpt";
 
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "X-API-Key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...messages,
-        ],
-        stream: true,
-      }),
-      // Fail fast instead of holding client connections open when the
-      // upstream bridge is unresponsive.
-      signal: AbortSignal.timeout(120_000),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "X-API-Key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            ...messages,
+          ],
+          stream: true,
+        }),
+        // Fail fast instead of holding client connections open when the
+        // upstream bridge is unresponsive.
+        signal: AbortSignal.timeout(120_000),
+      });
+    } catch (fetchErr) {
+      releaseSlot();
+      throw fetchErr;
+    }
 
     if (!response.ok) {
+      releaseSlot();
       const t = await response.text();
       console.error("SapinSapinAI error:", response.status, t);
       return new Response(JSON.stringify({ error: `SapinSapinAI API error (${response.status})` }), {
@@ -167,34 +198,43 @@ serve(async (req) => {
 
     const trackedStream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        if (!response.body) { controller.close(); return; }
+        if (!response.body) { controller.close(); releaseSlot(); return; }
         const reader = response.body.getReader();
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          controller.enqueue(value);
-          buffer += decoder.decode(value, { stream: true });
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+            buffer += decoder.decode(value, { stream: true });
 
-          let idx: number;
-          while ((idx = buffer.indexOf("\n")) !== -1) {
-            const line = buffer.slice(0, idx).replace(/\r$/, "");
-            buffer = buffer.slice(idx + 1);
-            if (!line.startsWith("data: ")) continue;
-            const payload = line.slice(6).trim();
-            if (payload === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(payload);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) outputTokens += estimateTokens(content);
-            } catch { /* partial */ }
+            let idx: number;
+            while ((idx = buffer.indexOf("\n")) !== -1) {
+              const line = buffer.slice(0, idx).replace(/\r$/, "");
+              buffer = buffer.slice(idx + 1);
+              if (!line.startsWith("data: ")) continue;
+              const payload = line.slice(6).trim();
+              if (payload === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(payload);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) outputTokens += estimateTokens(content);
+              } catch { /* partial */ }
+            }
           }
+          controller.close();
+        } catch (streamErr) {
+          console.error("Upstream stream error:", streamErr);
+          controller.error(streamErr);
+        } finally {
+          quota.usedTokens += outputTokens;
+          releaseSlot();
         }
-
-        quota.usedTokens += outputTokens;
-        controller.close();
       },
-      cancel() { quota.usedTokens += outputTokens; },
+      cancel() {
+        quota.usedTokens += outputTokens;
+        releaseSlot();
+      },
     });
 
     return new Response(trackedStream, {
