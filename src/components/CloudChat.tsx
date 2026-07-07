@@ -41,13 +41,16 @@ export function CloudChat() {
       onboardingRef.current.name = userMessages[0].content.trim();
     }
 
-    // Second user message is their email response
-    if (userMessages.length >= 2 && !onboardingRef.current.email) {
-      const emailMsg = userMessages[1].content;
-      const match = emailMsg.match(EMAIL_RE);
-      onboardingRef.current.email = match ? match[0] : null;
+    // Second user message is their email response; save the lead after it
+    // regardless of whether an email was provided. The save must not be
+    // gated on `!email` — a failed insert with a captured email could then
+    // never retry, despite the toast promising it would.
+    if (userMessages.length >= 2) {
+      if (!onboardingRef.current.email) {
+        const match = userMessages[1].content.match(EMAIL_RE);
+        onboardingRef.current.email = match ? match[0] : null;
+      }
 
-      // Save lead after second response regardless
       const { name, email } = onboardingRef.current;
       if (name) {
         onboardingRef.current.saved = true;

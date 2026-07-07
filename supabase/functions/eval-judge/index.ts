@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { Semaphore } from "../_shared/semaphore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +29,12 @@ const MAX_FIELD_LEN = 2000; // per-field input cap
 const MAX_RESPONSE_LEN = 300; // truncate verbose model responses
 const UPSTREAM_TIMEOUT_MS = 60_000;
 const PARSE_RETRIES = 1; // one corrective retry per batch before falling back
+
+// Bound concurrent judge requests per isolate: each request runs several
+// sequential upstream batches, so a burst of simultaneous eval runs would
+// otherwise stampede the inference bridge. Excess requests briefly queue,
+// then shed with 503 + Retry-After.
+const upstreamSemaphore = new Semaphore(6, 24);
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + "..." : s;
@@ -240,21 +247,33 @@ serve(async (req) => {
     }
     const items = body.items as JudgeRequest[];
 
-    const baseUrl =
-      Deno.env.get("APOLLO_INFERENCE_BASE_URL") ??
-      "https://apollo-inference-bridge.am1-aks.apolloglobal.net";
-    const model =
-      Deno.env.get("APOLLO_INFERENCE_MODEL") ?? "/models/gpt-oss-20b-balitanlp-cpt";
-
-    // Process in smaller batches, sequentially, to stay within compute limits.
-    const allResults: JudgeResult[] = [];
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      const batch = items.slice(i, i + BATCH_SIZE);
-      const batchResults = await judgeBatch(batch, i, apiKey, baseUrl, model);
-      allResults.push(...batchResults);
+    const acquired = await upstreamSemaphore.acquire();
+    if (!acquired) {
+      return new Response(JSON.stringify({ error: "Judge is at capacity, please retry shortly." }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "5" },
+      });
     }
 
-    return jsonResponse({ results: allResults });
+    try {
+      const baseUrl =
+        Deno.env.get("APOLLO_INFERENCE_BASE_URL") ??
+        "https://apollo-inference-bridge.am1-aks.apolloglobal.net";
+      const model =
+        Deno.env.get("APOLLO_INFERENCE_MODEL") ?? "/models/gpt-oss-20b-balitanlp-cpt";
+
+      // Process in smaller batches, sequentially, to stay within compute limits.
+      const allResults: JudgeResult[] = [];
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const batch = items.slice(i, i + BATCH_SIZE);
+        const batchResults = await judgeBatch(batch, i, apiKey, baseUrl, model);
+        allResults.push(...batchResults);
+      }
+
+      return jsonResponse({ results: allResults });
+    } finally {
+      upstreamSemaphore.release();
+    }
   } catch (e) {
     console.error("eval-judge error:", e);
     const message = e instanceof Error ? e.message : "Unknown error";
