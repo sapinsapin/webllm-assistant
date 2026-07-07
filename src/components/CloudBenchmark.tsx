@@ -116,7 +116,7 @@ export function CloudBenchmark() {
           tpotMs: r.result!.timeMs / r.result!.tokensEstimate,
         }));
 
-        await supabase.from("benchmark_runs").insert({
+        const { error: insertError } = await supabase.from("benchmark_runs").insert({
           model_name: "gpt-oss-20b-balitanlp-cpt",
           engine: "cloud",
           avg_tps: totalTps,
@@ -139,9 +139,11 @@ export function CloudBenchmark() {
           latitude: device.latitude,
           longitude: device.longitude,
         });
+        if (insertError) throw new Error(insertError.message);
         toast.success("Cloud benchmark saved!");
       } catch (err) {
         console.error("Failed to persist cloud benchmark:", err);
+        toast.error(`Couldn't save cloud benchmark: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
     }
 

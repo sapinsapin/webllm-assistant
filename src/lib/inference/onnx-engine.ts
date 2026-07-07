@@ -1,6 +1,20 @@
 import { pipeline, TextStreamer, env } from "@huggingface/transformers";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
 
+/** Structural type for the text-generation pipeline — the library's own
+ * types are too loose to use directly across versions. */
+type TextGenerationPipeline = {
+  (prompt: string, options: Record<string, unknown>): Promise<Array<{ generated_text: unknown }> | undefined>;
+  tokenizer: ConstructorParameters<typeof TextStreamer>[0];
+  dispose?: () => void;
+};
+
+interface PipelineProgress {
+  status?: string;
+  progress?: number;
+  file?: string;
+}
+
 /**
  * Transformers.js engine — WASM-based fallback for browsers without WebGPU.
  *
@@ -10,7 +24,7 @@ import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./ty
 export class OnnxEngine implements InferenceEngine {
   readonly type = "onnx" as const;
   readonly label = "Transformers.js (WASM)";
-  private generator: any = null;
+  private generator: TextGenerationPipeline | null = null;
 
   async load(
     modelId: string,
@@ -23,10 +37,10 @@ export class OnnxEngine implements InferenceEngine {
 
     onProgress(5, "Downloading model files...");
 
-    this.generator = await pipeline("text-generation", modelId, {
+    this.generator = (await pipeline("text-generation", modelId, {
       dtype: "q4",
       device: "wasm",
-      progress_callback: (progress: any) => {
+      progress_callback: (progress: PipelineProgress) => {
         if (progress.status === "download" || progress.status === "progress") {
           const pct = Math.round((progress.progress || 0));
           const file = progress.file || "";
@@ -37,7 +51,7 @@ export class OnnxEngine implements InferenceEngine {
           onProgress(100, "Model ready");
         }
       },
-    });
+    })) as unknown as TextGenerationPipeline;
 
     onProgress(100, "Model ready");
   }

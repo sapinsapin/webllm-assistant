@@ -161,7 +161,7 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
         if (cloudRows.length > 0) {
           const avgCloudTps = cloudRows.reduce((s, r) => s + r.cloud!.tps, 0) / cloudRows.length;
           const avgCloudLatency = cloudRows.reduce((s, r) => s + r.cloud!.timeMs, 0) / cloudRows.length;
-          await supabase.from("benchmark_runs").insert({
+          const { error: cloudError } = await supabase.from("benchmark_runs").insert({
             model_name: "gpt-oss-20b-balitanlp-cpt",
             engine: "cloud (c2c)",
             avg_tps: avgCloudTps,
@@ -179,6 +179,7 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
             device_model: device.deviceModel, device_type: device.deviceType,
             country: device.country, city: device.city, latitude: device.latitude, longitude: device.longitude,
           });
+          if (cloudError) throw new Error(cloudError.message);
         }
 
         // Save local results
@@ -186,7 +187,7 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
         if (localRows.length > 0) {
           const avgLocalTps = localRows.reduce((s, r) => s + r.local!.tps, 0) / localRows.length;
           const avgLocalLatency = localRows.reduce((s, r) => s + r.local!.timeMs, 0) / localRows.length;
-          await supabase.from("benchmark_runs").insert({
+          const { error: localError } = await supabase.from("benchmark_runs").insert({
             model_name: "local-model",
             engine: "local (c2c)",
             avg_tps: avgLocalTps,
@@ -204,11 +205,13 @@ export function C2CBenchmark({ engineRef, localReady }: C2CBenchmarkProps) {
             device_model: device.deviceModel, device_type: device.deviceType,
             country: device.country, city: device.city, latitude: device.latitude, longitude: device.longitude,
           });
+          if (localError) throw new Error(localError.message);
         }
 
         toast.success("C2C benchmark saved to community!");
       } catch (err) {
         console.error("Failed to save C2C benchmark:", err);
+        toast.error(`Couldn't save C2C benchmark: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
     }
 

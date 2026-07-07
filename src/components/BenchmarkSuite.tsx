@@ -73,9 +73,14 @@ const totalSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
 
 export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const {
-    status, statusMessage, downloadProgress, activeEngine, capabilities, currentModelName,
+    status, statusMessage, downloadProgress, activeEngine, capabilities, currentModelName, lastBenchmarkError,
     loadModel, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
   } = useLlmInference();
+
+  // Mirror the latest benchmark error into a ref so the long-running async
+  // benchmark loop below can read it without a stale closure.
+  const lastErrRef = useRef<string | null>(lastBenchmarkError);
+  useEffect(() => { lastErrRef.current = lastBenchmarkError; }, [lastBenchmarkError]);
 
   // Use currently loaded model if ready, otherwise pick best model for capabilities
   const loadedModel = status === "ready" && currentModelName
@@ -147,11 +152,39 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
         if (cancelled) return;
 
         const agg: AggregatedResult[] = [];
+        let succeededRuns = 0;
         for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
           const runs = allRuns.get(i) || [];
+          succeededRuns += runs.length;
           if (runs.length > 0) {
             agg.push(buildAggregated(BENCHMARK_PROMPTS[i].prompt, BENCHMARK_PROMPTS[i].category, BENCHMARK_PROMPTS[i].label, runs));
           }
+        }
+
+        // Every single run failed: this is an error, not a result. Do NOT
+        // compute a bogus 0 tok/s verdict and do NOT submit it to the feed.
+        if (agg.length === 0) {
+          toast({
+            title: "Benchmark failed",
+            description: lastErrRef.current || "All benchmark prompts failed to run.",
+            variant: "destructive",
+          });
+          setPhase("idle");
+          setProgress(0);
+          setCurrentPromptIdx(-1);
+          setCurrentRun(0);
+          return;
+        }
+
+        const failedRuns = totalSteps - succeededRuns;
+        if (failedRuns > 0) {
+          toast({
+            title: `${failedRuns} of ${totalSteps} runs failed`,
+            description: lastErrRef.current
+              ? `Last error: ${lastErrRef.current}. The verdict is based on the ${succeededRuns} runs that completed.`
+              : `The verdict is based on the ${succeededRuns} runs that completed.`,
+            variant: "destructive",
+          });
         }
 
         setAggregated(agg);

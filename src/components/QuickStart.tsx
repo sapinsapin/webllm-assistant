@@ -177,7 +177,8 @@ export function QuickStart({
       setPhase("ready_to_bench");
       // Remove the crash-detection row since loading succeeded
       if (loadAttemptId) {
-        supabase.from("benchmark_runs").delete().eq("id", loadAttemptId).then(() => {
+        supabase.from("benchmark_runs").delete().eq("id", loadAttemptId).then(({ error }) => {
+          if (error) console.error("Failed to clear load-attempt row:", error.message);
           setLoadAttemptId(null);
         });
       }
@@ -251,7 +252,7 @@ export function QuickStart({
 
         try {
           const device = await getDeviceInfo();
-          await supabase.from("benchmark_runs").insert({
+          const { error: saveError } = await supabase.from("benchmark_runs").insert({
             model_name: results[0]?.modelName || "Unknown",
             engine: engine,
             avg_tps: tps,
@@ -268,8 +269,14 @@ export function QuickStart({
             country: device.country, city: device.city,
             latitude: device.latitude, longitude: device.longitude,
           });
+          if (saveError) throw new Error(saveError.message);
         } catch (saveErr) {
           console.error("Failed to save benchmark:", saveErr);
+          toast({
+            title: "Couldn't save your result",
+            description: saveErr instanceof Error ? saveErr.message : "Unknown error",
+            variant: "destructive",
+          });
         }
       } catch (err) {
         console.error("QuickStart benchmark error:", err);
@@ -307,7 +314,7 @@ export function QuickStart({
     // Log attempt immediately — if the page crashes, this row stays as "Did not finish"
     try {
       const deviceInfo = await getDeviceInfo();
-      const { data } = await supabase.from("benchmark_runs").insert({
+      const { data, error: attemptError } = await supabase.from("benchmark_runs").insert({
         model_name: model.name,
         engine: engine,
         avg_tps: 0,
@@ -330,6 +337,7 @@ export function QuickStart({
         latitude: deviceInfo.latitude,
         longitude: deviceInfo.longitude,
       }).select("id").single();
+      if (attemptError) console.error("Failed to log load attempt:", attemptError.message);
       if (data?.id) setLoadAttemptId(data.id);
     } catch (e) {
       console.error("Failed to log load attempt:", e);
@@ -590,7 +598,19 @@ export function QuickStart({
             <button
               onClick={async () => {
                 // Mark as confirmed crash — keep as permanent record
-                await supabase.from("benchmark_runs").update({ verdict: "Crashed" }).eq("id", crashRecord.id);
+                const { error: crashError } = await supabase
+                  .from("benchmark_runs")
+                  .update({ verdict: "Crashed" })
+                  .eq("id", crashRecord.id);
+                if (crashError) {
+                  console.error("Failed to mark crash:", crashError);
+                  toast({
+                    title: "Couldn't update the record",
+                    description: crashError.message,
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 setCrashRecord(null);
                 setCrashDismissed(true);
               }}

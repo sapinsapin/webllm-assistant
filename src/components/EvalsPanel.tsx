@@ -103,14 +103,23 @@ export function EvalsPanel() {
 
         if (error) throw error;
 
-        const results: { index: number; score: number; reasoning: string }[] = data?.results || [];
+        const results: { index: number; score: number; reasoning: string; judged?: boolean }[] = data?.results || [];
+        let unjudged = 0;
         for (const r of results) {
           const idx = r.index - 1;
-          if (idx >= 0 && idx < scores.length) {
-            scores[idx].judgeScore = r.score;
-            scores[idx].judgeReasoning = r.reasoning;
-            scores[idx].score = computeHybridScore(computeScore(scores[idx].breakdown), r.score);
+          if (idx < 0 || idx >= scores.length) continue;
+          // judged:false means the judge could not validate a score for this
+          // item — keep the honest keyword score instead of blending a fake one.
+          if (r.judged === false) {
+            unjudged++;
+            continue;
           }
+          scores[idx].judgeScore = r.score;
+          scores[idx].judgeReasoning = r.reasoning;
+          scores[idx].score = computeHybridScore(computeScore(scores[idx].breakdown), r.score);
+        }
+        if (unjudged > 0) {
+          toast.warning(`${unjudged} item${unjudged === 1 ? "" : "s"} could not be judged — keyword scores kept for ${unjudged === 1 ? "it" : "them"}.`);
         }
 
         // Update rows with judge data

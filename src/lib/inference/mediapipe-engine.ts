@@ -1,5 +1,21 @@
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult, ImageAttachment } from "./types";
+import { getNavigatorGpu } from "@/lib/browser";
+
+/** Options-based factory and multimodal generate exist at runtime but are
+ * missing from the published @mediapipe/tasks-genai typings. */
+type LlmInferenceFactory = {
+  createFromOptions(
+    fileset: unknown,
+    options: Record<string, unknown>,
+  ): Promise<LlmInference>;
+};
+type MultimodalLlm = {
+  generateResponse(
+    input: Array<string | { imageSource: string }>,
+    callback: (partial: string, done: boolean) => void,
+  ): void;
+};
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -195,7 +211,7 @@ export class MediaPipeEngine implements InferenceEngine {
     hfToken?: string,
     options?: { vision?: boolean }
   ): Promise<void> {
-    if (!(navigator as any).gpu) {
+    if (!getNavigatorGpu()) {
       throw new Error("WebGPU is not supported in this browser.");
     }
 
@@ -250,7 +266,7 @@ export class MediaPipeEngine implements InferenceEngine {
           await sendTokenToServiceWorker(token);
         }
 
-        this.llm = await (LlmInference as any).createFromOptions(genai, {
+        this.llm = await (LlmInference as unknown as LlmInferenceFactory).createFromOptions(genai, {
           baseOptions: {
             modelAssetPath: modelUrl,
           },
@@ -259,8 +275,9 @@ export class MediaPipeEngine implements InferenceEngine {
             : {}),
         });
         this.supportsVision = isVision;
-      } catch (err: any) {
-        throw new Error(`Failed to load model via streaming path: ${err?.message || err}`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to load model via streaming path: ${msg}`);
       }
     } else {
       // Standard buffer download with progress tracking
@@ -269,7 +286,7 @@ export class MediaPipeEngine implements InferenceEngine {
 
       try {
         if (isVision) {
-          this.llm = await (LlmInference as any).createFromOptions(genai, {
+          this.llm = await (LlmInference as unknown as LlmInferenceFactory).createFromOptions(genai, {
             baseOptions: {
               modelAssetBuffer: buffer,
             },
@@ -338,7 +355,7 @@ export class MediaPipeEngine implements InferenceEngine {
         : prompt;
 
       // Build multimodal prompt array for vision models
-      const multimodalInput: any[] = [];
+      const multimodalInput: Array<string | { imageSource: string }> = [];
       for (const img of images) {
         const objectUrl = toObjectUrl(img.dataUrl);
         multimodalInput.push({ imageSource: objectUrl });
@@ -347,17 +364,25 @@ export class MediaPipeEngine implements InferenceEngine {
 
       try {
         await this.enqueue(() => new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            reject(new Error("Vision inference timed out — the model may not support this image format or size."));
-          }, TIMEOUT_MS);
+          // Inactivity watchdog: re-armed on every partial so a mid-stream
+          // stall rejects instead of hanging forever.
+          let timer: ReturnType<typeof setTimeout>;
+          const armWatchdog = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+              reject(new Error("Vision inference timed out — the model may not support this image format or size."));
+            }, TIMEOUT_MS);
+          };
+          armWatchdog();
 
           try {
             let accumulated = "";
-            (this.llm as any).generateResponse(multimodalInput, (partial: string, done: boolean) => {
-              clearTimeout(timer);
+            (this.llm as unknown as MultimodalLlm).generateResponse(multimodalInput, (partial: string, done: boolean) => {
+              armWatchdog();
               accumulated += partial;
               callbacks.onToken(partial);
               if (done) {
+                clearTimeout(timer);
                 callbacks.onComplete();
                 resolve();
               }
@@ -372,17 +397,23 @@ export class MediaPipeEngine implements InferenceEngine {
       }
     } else {
       await this.enqueue(() => new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new Error("Inference timed out."));
-        }, TIMEOUT_MS);
+        let timer: ReturnType<typeof setTimeout>;
+        const armWatchdog = () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            reject(new Error("Inference timed out."));
+          }, TIMEOUT_MS);
+        };
+        armWatchdog();
 
         try {
           let accumulated = "";
           this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
-            clearTimeout(timer);
+            armWatchdog();
             accumulated += partial;
             callbacks.onToken(partial);
             if (done) {
+              clearTimeout(timer);
               callbacks.onComplete();
               resolve();
             }
@@ -404,14 +435,29 @@ export class MediaPipeEngine implements InferenceEngine {
     let firstTokenTime: number | null = null;
 
     await this.enqueue(() => new Promise<void>((resolve, reject) => {
+      // Same inactivity watchdog as generateStream — previously this path
+      // had no timeout at all and could hang a benchmark run forever.
+      const TIMEOUT_MS = 90_000;
+      let timer: ReturnType<typeof setTimeout>;
+      const armWatchdog = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => reject(new Error("Inference timed out.")), TIMEOUT_MS);
+      };
+      armWatchdog();
+
       try {
         this.llm!.generateResponse(prompt, (partial: string, done: boolean) => {
+          armWatchdog();
           if (firstTokenTime === null) firstTokenTime = performance.now();
           response += partial;
           tokenCount++;
-          if (done) resolve();
+          if (done) {
+            clearTimeout(timer);
+            resolve();
+          }
         });
       } catch (err) {
+        clearTimeout(timer);
         reject(err);
       }
     }));

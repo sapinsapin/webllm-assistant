@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Globe2, Map as MapIcon, Flame } from "lucide-react";
 
@@ -30,17 +31,16 @@ function tpsRadius(tps: number): number {
 
 export function BenchmarkHeatmap() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const layerRef = useRef<any>(null);
-  const [runs, setRuns] = useState<GeoRun[]>([]);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const layerRef = useRef<import("leaflet").Layer | null>(null);
   const [mode, setMode] = useState<ViewMode>("heat");
-  const [loading, setLoading] = useState(true);
 
-  // Fetch geo-tagged local runs
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
+  // Fetch geo-tagged local runs. Errors must surface as an error state —
+  // a failed fetch is not the same as "no geo-tagged benchmarks yet".
+  const { data: runs = [], isPending: loading, isError, refetch, isFetching } = useQuery({
+    queryKey: ["benchmark_runs_geo"],
+    queryFn: async (): Promise<GeoRun[]> => {
+      const { data, error } = await supabase
         .from("benchmark_runs")
         .select("latitude,longitude,avg_tps,model_name,engine,device_model,city,country")
         .not("latitude", "is", null)
@@ -50,12 +50,12 @@ export function BenchmarkHeatmap() {
         .neq("engine", "cloud")
         .gt("avg_tps", 0)
         .limit(1000);
-      if (cancelled) return;
-      setRuns((data as GeoRun[]) || []);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+      if (error) throw new Error(error.message);
+      return (data as GeoRun[]) || [];
+    },
+    retry: 2,
+    staleTime: 60_000,
+  });
 
   // Lazy-init Leaflet map once
   useEffect(() => {
@@ -197,7 +197,19 @@ export function BenchmarkHeatmap() {
             <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading map…</p>
           </div>
         )}
-        {!loading && runs.length === 0 && (
+        {!loading && isError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/40 backdrop-blur-sm">
+            <p className="text-xs text-destructive font-mono">Couldn't load map data.</p>
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="pointer-events-auto rounded-md border border-border bg-secondary/50 px-2.5 py-1 text-[11px] font-mono text-secondary-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+        {!loading && !isError && runs.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
             <p className="text-xs text-muted-foreground font-mono">No geo-tagged benchmarks yet.</p>
           </div>
