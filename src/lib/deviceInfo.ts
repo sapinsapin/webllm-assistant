@@ -1,3 +1,5 @@
+import { getNavigatorGpu, getDeviceMemoryGb } from "@/lib/browser";
+
 export interface DeviceInfo {
   browser: string;
   os: string;
@@ -196,9 +198,9 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
   const geoPromise = fetchGeoLocation();
 
   try {
-    const adapter = await (navigator as any).gpu?.requestAdapter();
+    const adapter = await getNavigatorGpu()?.requestAdapter();
     if (adapter) {
-      const info = await adapter.requestAdapterInfo?.() ?? (adapter as any).info;
+      const info = (await adapter.requestAdapterInfo?.()) ?? adapter.info;
       if (info) {
         gpu = info.device || info.description || null;
         gpuVendor = info.vendor || null;
@@ -206,7 +208,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
       if (!gpu && info?.architecture) {
         gpu = info.architecture;
       }
-      maxBufferSize = (adapter as any).limits?.maxBufferSize;
+      maxBufferSize = adapter.limits?.maxBufferSize;
     }
   } catch {
     // WebGPU not available
@@ -234,7 +236,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
 
   // Browser-reported RAM is capped at 8 GB. On Apple Silicon, derive a
   // better estimate from the WebGPU buffer-size limit (unified memory).
-  let ram: number | null = (navigator as any).deviceMemory ?? null;
+  let ram: number | null = getDeviceMemoryGb() ?? null;
   if (isAppleSilicon && ua.includes("Macintosh")) {
     const estimated = estimateAppleRam(maxBufferSize);
     if (estimated && (ram == null || estimated > ram)) {

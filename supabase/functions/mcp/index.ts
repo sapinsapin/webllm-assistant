@@ -71,6 +71,72 @@ function verdictFor(tps: number): string {
   return "Unusable";
 }
 
+// ----- Input validation for the public write surface -----
+// External agents call submit_benchmark_run unauthenticated; without bounds,
+// NaN/Infinity throughputs and megabyte result payloads would pollute the
+// community dashboard for every user.
+
+const MAX_TPS = 100_000;
+const MAX_TTFT_MS = 3_600_000; // 1 hour
+const MAX_RESULT_ITEMS = 200;
+
+interface CommunityQueryArgs {
+  model_name?: string;
+  engine?: string;
+  device_type?: string;
+  limit?: number;
+}
+
+interface SubmitRunArgs {
+  model_name?: unknown;
+  engine?: unknown;
+  avg_tps?: unknown;
+  avg_ttft_ms?: unknown;
+  verdict?: unknown;
+  device_model?: unknown;
+  device_type?: unknown;
+  os?: unknown;
+  browser?: unknown;
+  cores?: unknown;
+  ram_gb?: unknown;
+  gpu?: unknown;
+  gpu_vendor?: unknown;
+  country?: unknown;
+  results?: unknown;
+}
+
+function optionalString(v: unknown, maxLen: number): string | null {
+  return typeof v === "string" && v.trim().length > 0 ? v.slice(0, maxLen) : null;
+}
+
+function optionalFiniteNumber(v: unknown, min: number, max: number): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= min && n <= max ? n : null;
+}
+
+/** Validate a submission. Returns an error message, or null when valid. */
+function validateSubmission(args: SubmitRunArgs): string | null {
+  if (typeof args.model_name !== "string" || args.model_name.trim().length === 0) {
+    return "model_name must be a non-empty string";
+  }
+  if (typeof args.engine !== "string" || args.engine.trim().length === 0) {
+    return "engine must be a non-empty string";
+  }
+  const tps = Number(args.avg_tps);
+  if (!Number.isFinite(tps) || tps < 0 || tps > MAX_TPS) {
+    return `avg_tps must be a finite number between 0 and ${MAX_TPS}`;
+  }
+  if (args.avg_ttft_ms !== undefined && optionalFiniteNumber(args.avg_ttft_ms, 0, MAX_TTFT_MS) === null) {
+    return `avg_ttft_ms must be a finite number between 0 and ${MAX_TTFT_MS}`;
+  }
+  if (args.results !== undefined) {
+    if (!Array.isArray(args.results)) return "results must be an array";
+    if (args.results.length > MAX_RESULT_ITEMS) return `results may contain at most ${MAX_RESULT_ITEMS} items`;
+    if (args.results.some((r) => typeof r !== "object" || r === null)) return "each results item must be an object";
+  }
+  return null;
+}
+
 // ----- MCP server -----
 const mcp = new McpServer({
   name: "can-i-ai",
@@ -118,7 +184,7 @@ mcp.tool({
       limit: { type: "number", description: "Max rows (1-100)", default: 25 },
     },
   },
-  handler: async (args: any) => {
+  handler: async (args: CommunityQueryArgs) => {
     const limit = Math.min(Math.max(args?.limit ?? 25, 1), 100);
     let q = supabase
       .from("benchmark_runs")
@@ -166,24 +232,29 @@ mcp.tool({
     },
     required: ["model_name", "engine", "avg_tps"],
   },
-  handler: async (args: any) => {
+  handler: async (args: SubmitRunArgs) => {
+    const validationError = validateSubmission(args);
+    if (validationError) {
+      return { content: [{ type: "text", text: `Error: ${validationError}` }], isError: true };
+    }
+    const avgTps = Number(args.avg_tps);
     const row = {
-      model_name: String(args.model_name).slice(0, 200),
-      engine: String(args.engine).slice(0, 50),
-      avg_tps: Number(args.avg_tps),
-      avg_ttft_ms: Number(args.avg_ttft_ms ?? 0),
-      verdict: args.verdict ? String(args.verdict) : verdictFor(Number(args.avg_tps)),
-      device_model: args.device_model ?? null,
-      device_type: args.device_type ?? null,
-      os: args.os ?? null,
-      browser: args.browser ?? "mcp-agent",
-      cores: args.cores ?? null,
-      ram_gb: args.ram_gb ?? null,
-      gpu: args.gpu ?? null,
-      gpu_vendor: args.gpu_vendor ?? null,
-      country: args.country ?? null,
+      model_name: (args.model_name as string).slice(0, 200),
+      engine: (args.engine as string).slice(0, 50),
+      avg_tps: avgTps,
+      avg_ttft_ms: optionalFiniteNumber(args.avg_ttft_ms, 0, MAX_TTFT_MS) ?? 0,
+      verdict: optionalString(args.verdict, 50) ?? verdictFor(avgTps),
+      device_model: optionalString(args.device_model, 200),
+      device_type: optionalString(args.device_type, 50),
+      os: optionalString(args.os, 100),
+      browser: optionalString(args.browser, 200) ?? "mcp-agent",
+      cores: optionalFiniteNumber(args.cores, 1, 1024),
+      ram_gb: optionalFiniteNumber(args.ram_gb, 0.1, 4096),
+      gpu: optionalString(args.gpu, 200),
+      gpu_vendor: optionalString(args.gpu_vendor, 100),
+      country: optionalString(args.country, 100),
       user_agent: "mcp:can-i-ai/1.0",
-      results: args.results ?? [],
+      results: (args.results as unknown[] | undefined) ?? [],
     };
     const { data, error } = await supabase
       .from("benchmark_runs")

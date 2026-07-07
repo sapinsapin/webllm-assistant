@@ -1,14 +1,15 @@
 import type { EngineCapability, EngineType } from "./types";
+import { getNavigatorGpu } from "@/lib/browser";
 
 export async function detectCapabilities(): Promise<EngineCapability[]> {
   const caps: EngineCapability[] = [];
 
   // 1. Check WebGPU for MediaPipe
-  const hasWebGPU = !!(navigator as any).gpu;
+  const gpu = getNavigatorGpu();
   let webgpuUsable = false;
-  if (hasWebGPU) {
+  if (gpu) {
     try {
-      const adapter = await (navigator as any).gpu.requestAdapter();
+      const adapter = await gpu.requestAdapter();
       webgpuUsable = !!adapter;
     } catch {
       webgpuUsable = false;

@@ -1,3 +1,5 @@
+import { getNavigatorGpu, getDeviceMemoryGb } from "@/lib/browser";
+
 /**
  * Pre-download device diagnostics — checks RAM, storage, and GPU limits
  * to determine if the device can handle a given model weight.
@@ -85,7 +87,7 @@ async function checkArrayBufferLimit(modelBytes: number): Promise<DiagnosticChec
 }
 
 async function checkDeviceMemory(modelBytes: number): Promise<DiagnosticCheck> {
-  const ramGB = (navigator as any).deviceMemory as number | undefined;
+  const ramGB = getDeviceMemoryGb();
 
   if (!ramGB) {
     return {
@@ -180,7 +182,7 @@ async function checkStorageQuota(modelBytes: number): Promise<DiagnosticCheck> {
 
 async function checkGpuLimits(modelBytes: number): Promise<DiagnosticCheck> {
   try {
-    const gpu = (navigator as any).gpu;
+    const gpu = getNavigatorGpu();
     if (!gpu) {
       return {
         id: "gpu",
@@ -206,7 +208,7 @@ async function checkGpuLimits(modelBytes: number): Promise<DiagnosticCheck> {
 
     // Estimate available VRAM from device memory (unified memory architectures)
     // or fall back to maxBufferSize as a proxy
-    const ramGB = (navigator as any).deviceMemory as number | undefined;
+    const ramGB = getDeviceMemoryGb();
     // On unified-memory devices (Apple Silicon, mobile), GPU shares system RAM.
     // Conservatively assume GPU can use ~60% of system RAM.
     // On discrete GPU systems, maxBufferSize is the best proxy we have.

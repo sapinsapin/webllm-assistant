@@ -31,8 +31,8 @@ function tpsRadius(tps: number): number {
 
 export function BenchmarkHeatmap() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const layerRef = useRef<any>(null);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const layerRef = useRef<import("leaflet").Layer | null>(null);
   const [mode, setMode] = useState<ViewMode>("heat");
 
   // Fetch geo-tagged local runs. Errors must surface as an error state —

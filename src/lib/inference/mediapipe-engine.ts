@@ -1,5 +1,21 @@
 import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult, ImageAttachment } from "./types";
+import { getNavigatorGpu } from "@/lib/browser";
+
+/** Options-based factory and multimodal generate exist at runtime but are
+ * missing from the published @mediapipe/tasks-genai typings. */
+type LlmInferenceFactory = {
+  createFromOptions(
+    fileset: unknown,
+    options: Record<string, unknown>,
+  ): Promise<LlmInference>;
+};
+type MultimodalLlm = {
+  generateResponse(
+    input: Array<string | { imageSource: string }>,
+    callback: (partial: string, done: boolean) => void,
+  ): void;
+};
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -195,7 +211,7 @@ export class MediaPipeEngine implements InferenceEngine {
     hfToken?: string,
     options?: { vision?: boolean }
   ): Promise<void> {
-    if (!(navigator as any).gpu) {
+    if (!getNavigatorGpu()) {
       throw new Error("WebGPU is not supported in this browser.");
     }
 
@@ -250,7 +266,7 @@ export class MediaPipeEngine implements InferenceEngine {
           await sendTokenToServiceWorker(token);
         }
 
-        this.llm = await (LlmInference as any).createFromOptions(genai, {
+        this.llm = await (LlmInference as unknown as LlmInferenceFactory).createFromOptions(genai, {
           baseOptions: {
             modelAssetPath: modelUrl,
           },
@@ -259,8 +275,9 @@ export class MediaPipeEngine implements InferenceEngine {
             : {}),
         });
         this.supportsVision = isVision;
-      } catch (err: any) {
-        throw new Error(`Failed to load model via streaming path: ${err?.message || err}`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to load model via streaming path: ${msg}`);
       }
     } else {
       // Standard buffer download with progress tracking
@@ -269,7 +286,7 @@ export class MediaPipeEngine implements InferenceEngine {
 
       try {
         if (isVision) {
-          this.llm = await (LlmInference as any).createFromOptions(genai, {
+          this.llm = await (LlmInference as unknown as LlmInferenceFactory).createFromOptions(genai, {
             baseOptions: {
               modelAssetBuffer: buffer,
             },
@@ -338,7 +355,7 @@ export class MediaPipeEngine implements InferenceEngine {
         : prompt;
 
       // Build multimodal prompt array for vision models
-      const multimodalInput: any[] = [];
+      const multimodalInput: Array<string | { imageSource: string }> = [];
       for (const img of images) {
         const objectUrl = toObjectUrl(img.dataUrl);
         multimodalInput.push({ imageSource: objectUrl });
@@ -360,7 +377,7 @@ export class MediaPipeEngine implements InferenceEngine {
 
           try {
             let accumulated = "";
-            (this.llm as any).generateResponse(multimodalInput, (partial: string, done: boolean) => {
+            (this.llm as unknown as MultimodalLlm).generateResponse(multimodalInput, (partial: string, done: boolean) => {
               armWatchdog();
               accumulated += partial;
               callbacks.onToken(partial);
