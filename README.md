@@ -155,7 +155,7 @@ app, and the engine fallback chain adapts to what the platform can do:
 | Desktop Chrome/Edge (WebGPU) | mediapipe → webllm → onnx | ✅ web-optimized `*-web.task` presets (`gemma-4-e2b`/`e4b`) |
 | Android Chrome (WebGPU) | mediapipe → webllm → onnx | ✅ same presets, VRAM permitting |
 | iOS Safari (no WebGPU) | onnx (WASM) | ❌ `getGemma4Model()` returns null; fallback model loads instead |
-| macOS native (Apple Silicon) | — (outside this app) | ✅ MLX 4-bit builds — see [`scripts/gemma4-mlx/`](./scripts/gemma4-mlx/) |
+| macOS native (Apple Silicon) | — (outside this app) | ✅ MLX 4-bit builds — registry in `src/lib/macosModels.ts`, tooling in [`scripts/gemma4-mlx/`](./scripts/gemma4-mlx/) |
 
 Platform detection lives in `src/lib/deviceInfo.ts` (order matters: iPhone UAs
 contain "like Mac OS X" and Android UAs contain "Linux" — tested in
