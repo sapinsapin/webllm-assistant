@@ -145,6 +145,40 @@ Real models are never downloaded in tests — engines are mocked at the
 
 Before pushing: `npm test && npm run lint && npm run build` must all pass.
 
+## Platform support
+
+There is no native iOS/Android/macOS app — every platform runs the same web
+app, and the engine fallback chain adapts to what the platform can do:
+
+| Platform | Engine path | Gemma 4 |
+| --- | --- | --- |
+| Desktop Chrome/Edge (WebGPU) | mediapipe → webllm → onnx | ✅ web-optimized `*-web.task` presets (`gemma-4-e2b`/`e4b`) |
+| Android Chrome (WebGPU) | mediapipe → webllm → onnx | ✅ same presets, VRAM permitting |
+| iOS Safari (no WebGPU) | onnx (WASM) | ❌ `getGemma4Model()` returns null; fallback model loads instead |
+| macOS native (Apple Silicon) | — (outside this app) | ✅ MLX 4-bit builds — see [`scripts/gemma4-mlx/`](./scripts/gemma4-mlx/) |
+
+Platform detection lives in `src/lib/deviceInfo.ts` (order matters: iPhone UAs
+contain "like Mac OS X" and Android UAs contain "Linux" — tested in
+`deviceInfo.test.ts`).
+
+## Timeout policy
+
+Timeouts exist to catch dead connections and stalls — never to cut off slow
+but progressing work:
+
+- **Cloud chat** (`CloudChat.tsx` + `src/lib/watchdog.ts`): a generous connect
+  budget (25s, edge functions cold-start), then an idle watchdog (45s)
+  **re-armed on every streamed chunk**. On timeout the UI shows a specific
+  error with a fallback suggestion (load the on-device model). Reads race the
+  abort signal so stalls are caught even where abort doesn't propagate into
+  `reader.read()`.
+- **Local inference** (`mediapipe-engine.ts`): the same progress-aware pattern —
+  the watchdog re-arms on every partial, so only genuine stalls reject.
+- **Edge functions**: upstream fetches use `AbortSignal.timeout` (60s) so a
+  hung inference bridge returns a proper JSON error instead of hanging isolates.
+- **Model downloads have no timeout by design** — multi-GB downloads on slow
+  networks must not be killed; failures surface from the network layer itself.
+
 ## Model checkpoint caching
 
 The app registers a service worker (`/model-cache-sw.js`) that caches downloaded

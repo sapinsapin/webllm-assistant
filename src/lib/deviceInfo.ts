@@ -19,8 +19,7 @@ export interface DeviceInfo {
   longitude: number | null;
 }
 
-function detectBrowser(): string {
-  const ua = navigator.userAgent;
+export function detectBrowser(ua: string = navigator.userAgent): string {
   if (ua.includes("Edg/")) return "Edge " + (ua.match(/Edg\/([\d.]+)/)?.[1] ?? "");
   if (ua.includes("Chrome/")) return "Chrome " + (ua.match(/Chrome\/([\d.]+)/)?.[1] ?? "");
   if (ua.includes("Firefox/")) return "Firefox " + (ua.match(/Firefox\/([\d.]+)/)?.[1] ?? "");
@@ -28,13 +27,14 @@ function detectBrowser(): string {
   return "Unknown";
 }
 
-function detectOS(): string {
-  const ua = navigator.userAgent;
+export function detectOS(ua: string = navigator.userAgent): string {
+  // Mobile checks MUST come first: iPhone UAs contain "like Mac OS X" and
+  // Android UAs contain "Linux", so the desktop checks would shadow them.
+  if (ua.includes("iPhone") || ua.includes("iPad")) return "iOS";
+  if (ua.includes("Android")) return "Android";
   if (ua.includes("Win")) return "Windows";
   if (ua.includes("Mac")) return "macOS";
   if (ua.includes("Linux")) return "Linux";
-  if (ua.includes("Android")) return "Android";
-  if (ua.includes("iPhone") || ua.includes("iPad")) return "iOS";
   return "Unknown";
 }
 
@@ -166,8 +166,7 @@ function estimateAppleRam(maxBufferSizeBytes: number | undefined): number | null
   return best;
 }
 
-function detectDeviceType(): "desktop" | "mobile" | "tablet" {
-  const ua = navigator.userAgent;
+export function detectDeviceType(ua: string = navigator.userAgent): "desktop" | "mobile" | "tablet" {
   if (/iPad|Android(?!.*Mobile)|Tablet/i.test(ua)) return "tablet";
   if (/iPhone|iPod|Android.*Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return "mobile";
   return "desktop";

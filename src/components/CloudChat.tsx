@@ -6,9 +6,18 @@ import { Cloud, AlertCircle, MessageSquare, BarChart3 } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/hooks/useLlmInference";
 import { supabase } from "@/integrations/supabase/client";
 import { createSseParser } from "@/lib/sse";
+import { createStreamWatchdog, unwrapWatchdogError, WatchdogTimeoutError } from "@/lib/watchdog";
 import { toast } from "sonner";
 
 const SAPINSAPINAI_CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/apollo-chat`;
+
+// Generous on purpose — edge functions cold-start and busy upstreams pause
+// between tokens; the idle timer re-arms on every chunk, so only a genuinely
+// dead connection or stalled stream ever times out.
+const CONNECT_TIMEOUT_MS = 25_000;
+const IDLE_TIMEOUT_MS = 45_000;
+const TIMEOUT_FALLBACK_HINT =
+  "You can retry, or load an on-device model from the sidebar — it runs entirely in your browser with no server involved.";
 
 // Simple email regex for detection
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
@@ -77,6 +86,16 @@ export function CloudChat() {
     setIsLoading(true);
     tryCaptureLead(updatedMessages);
 
+    // Progress-aware watchdog: a fixed connect budget, then an idle timer
+    // re-armed on every chunk — slow-but-streaming responses are never cut
+    // off, only dead connections and mid-stream stalls.
+    const watchdog = createStreamWatchdog({
+      connectTimeoutMs: CONNECT_TIMEOUT_MS,
+      idleTimeoutMs: IDLE_TIMEOUT_MS,
+      connectMessage: "The cloud service took too long to respond.",
+      idleMessage: "The response stream stalled.",
+    });
+
     try {
       const resp = await fetch(SAPINSAPINAI_CHAT_URL, {
         method: "POST",
@@ -87,7 +106,9 @@ export function CloudChat() {
         body: JSON.stringify({
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
         }),
+        signal: watchdog.signal,
       });
+      watchdog.feed(); // headers arrived
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
@@ -111,9 +132,18 @@ export function CloudChat() {
         setMessages([...updatedMessages, { role: "assistant", content: assistantContent }]);
       };
 
+      // Race each read against the watchdog: abort propagation into an
+      // in-flight reader.read() is not guaranteed on every platform, so a
+      // stalled stream must reject here regardless.
+      const abortPromise = new Promise<never>((_, reject) => {
+        if (watchdog.signal.aborted) reject(watchdog.signal.reason);
+        watchdog.signal.addEventListener("abort", () => reject(watchdog.signal.reason), { once: true });
+      });
+
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } = await Promise.race([reader.read(), abortPromise]);
         if (done) break;
+        watchdog.feed();
         applyDeltas(parser.push(decoder.decode(value, { stream: true })));
       }
       applyDeltas(parser.flush());
@@ -121,11 +151,18 @@ export function CloudChat() {
       if (!assistantContent) {
         throw new Error("The AI service returned an empty response. Please try again.");
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
+    } catch (rawErr) {
+      const err = unwrapWatchdogError(rawErr, watchdog.signal);
+      const msg =
+        err instanceof WatchdogTimeoutError
+          ? `${err.message} ${TIMEOUT_FALLBACK_HINT}`
+          : err instanceof Error
+            ? err.message
+            : "Unknown error";
       setError(msg);
       setMessages([...updatedMessages, { role: "assistant", content: `Error: ${msg}` }]);
     } finally {
+      watchdog.clear();
       setIsLoading(false);
     }
   }, [messages, tryCaptureLead]);
