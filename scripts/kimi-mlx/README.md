@@ -62,16 +62,39 @@ the web tier is **text-only** via the Moonlight tower:
 `Kimi-Linear-48B` is **blocked** for web: its KDA hybrid attention is not
 implemented in MLC, and 24 GB of weights exceeds any browser envelope.
 
-## Phase 3 — native mobile (iOS / Android) — blocked, fallback only
+## Phase 3 — native mobile (iOS / Android) — blocked for LiteRT/WebGPU;
+## optional GGUF/pruning experiments only
 
-No LiteRT/MediaPipe path exists for any Kimi architecture (custom MoE +
-MoonViT / KDA are unsupported by the LiteRT converter), and 3B-active MoE
-with 16B resident weights exceeds phone memory budgets regardless. Decision:
+Why quantized conversion does not get Kimi onto phones:
 
-- Do **not** attempt a mobile conversion; revisit if Moonshot ships a
-  sub-4B dense model or LiteRT gains the architecture.
-- Mobile users selecting Kimi get the app's standard fallback chain
-  (cloud endpoint when configured, else Gemma 4 E2B on-device).
+- **LiteRT**: `.task`/`.litertlm` artifacts are produced by `ai-edge-torch`,
+  which only implements a fixed menu of dense transformer architectures.
+  Kimi-VL's DeepSeek-V3-style MoE + MLA attention + MoonViT tower would have
+  to be reimplemented in its building blocks — a multi-week port, not a
+  conversion run. KDA (Kimi-Linear) is equally unsupported.
+- **Memory physics**: "A3B" = 3B *active*, but MoE routing swaps experts per
+  token, so all **16.4B params stay resident**. 4-bit ≈ 8.5 GB and 3-bit ≈
+  6.5 GB both exceed the ~4–6 GB a flagship app can allocate; 2-bit ≈ 4.5 GB
+  loads but 2-bit MoE quality degrades below Gemma 4 E2B at ~10× the size.
+- **Mobile WebGPU is stricter, not looser**: browsers cap single buffers
+  (~2 GB) and total GPU memory below native limits, and MLC lacks the
+  architecture anyway — if it can't fit in an app, it can't fit in a tab.
+
+Decision: phones stay on the standard fallback chain (cloud endpoint when
+configured, else Gemma 4 E2B on-device). Revisit if Moonshot ships a sub-4B
+dense model or ai-edge-torch gains MoE/MLA.
+
+Optional experiments (not on the roadmap; "because we can" territory —
+neither is expected to beat Gemma 4 E2B on quality-per-GB):
+
+1. **GGUF + llama.cpp runtime** (sidesteps LiteRT entirely):
+   `mradermacher/Kimi-VL-A3B-Instruct-GGUF` exists and llama.cpp runs on
+   iOS/Android (llama.rn / LLMFarm). A Q2_K build (~4.5 GB) is testable on a
+   16 GB flagship today; the open question is output quality at 2-bit.
+2. **Expert pruning (REAP)**: the community already prunes Kimi MoEs
+   (Kimi-Linear 48B→35B). Pruning Kimi-VL ~40% then 4-bit quantizing lands
+   near 5 GB — tablet/flagship territory, producible on an Apple Silicon
+   Mac, but it needs a quality eval before shipping to anyone.
 
 ## Sequencing
 
