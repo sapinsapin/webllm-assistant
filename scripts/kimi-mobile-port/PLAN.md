@@ -69,6 +69,15 @@ parity-testing against the reference model requires it.
 
 ## Checkpoint log
 
+- 2026-08-08 (later still): M1 started in a cloud session. Fork created:
+  upstream renamed the repo too — it is now `google-ai-edge/litert-torch`
+  → fork at `internetoftim/litert-torch`, work branch
+  `kimi-moonlight-port`. Scope: deepseek_v3 model_ext (cache-shape
+  override, attention reshape fix, gemma4-style noaux_tc router,
+  litert_moe_sequential experts) + random-weight parity tests. Also:
+  `internetoftim/Kimi-VL-A3B-Instruct-mlx-4bit` published (macOS tier
+  complete).
+
 - 2026-08-08 (later): M0 complete — **GO** with plan revision; memo at
   [M0-memo.md](./M0-memo.md). M1/M2 re-scoped onto upstream's `export_hf`
   path. Top risks: `moe` custom-op runtime contract (SiLU/int4/delegates),
