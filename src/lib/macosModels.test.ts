@@ -21,12 +21,17 @@ describe("MACOS_MLX_GEMMA4 (macOS-optimized Gemma 4 registry)", () => {
     }
   });
 
-  it("the self-published build targets the internetoftim account and matches the conversion script's naming", () => {
-    const self = MACOS_MLX_GEMMA4.filter((m) => m.source === "self");
-    expect(self).toHaveLength(1);
-    // convert_and_upload.sh publishes internetoftim/gemma-4-<size>-it-mlx-<bits>bit
-    expect(self[0].hfRepo).toMatch(/^internetoftim\/gemma-4-e\db-it-mlx-\dbit$/);
-    expect(self[0].quantBits).toBe(4);
+  it("uses official mlx-community builds only (self-publishing skipped — official conversions exist)", () => {
+    expect(MACOS_MLX_GEMMA4.filter((m) => m.source === "self")).toHaveLength(0);
+    for (const m of MACOS_MLX_GEMMA4) {
+      expect(m.hfRepo, m.id).toMatch(/^mlx-community\//);
+    }
+  });
+
+  it("offers an edge/low-memory E2B tier alongside E4B", () => {
+    const bases = MACOS_MLX_GEMMA4.map((m) => m.baseModel);
+    expect(bases).toContain("google/gemma-4-E2B-it");
+    expect(bases).toContain("google/gemma-4-E4B-it");
   });
 
   it("valid HF repo ids throughout (owner/name, no URL, no spaces)", () => {

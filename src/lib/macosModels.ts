@@ -8,9 +8,11 @@
  * macosModels.test.ts).
  *
  * Verified 2026-08: the official mlx-community conversions exist on
- * Hugging Face; `scripts/gemma4-mlx/convert_and_upload.sh` produces the
- * internetoftim build from google/gemma-4-E4B-it on an Apple Silicon Mac
- * (MLX cannot run on Linux/x86, so CI never exercises these entries).
+ * Hugging Face and are actively maintained (e4b 4-bit: ~29k downloads),
+ * so we use them directly instead of self-publishing a duplicate build.
+ * `scripts/gemma4-mlx/convert_and_upload.sh` remains available if a
+ * self-published internetoftim build is ever needed (MLX cannot run on
+ * Linux/x86, so CI never exercises these entries).
  */
 
 export interface MacosMlxModel {
@@ -52,14 +54,14 @@ export const MACOS_MLX_GEMMA4: MacosMlxModel[] = [
     runCommand: RUN("mlx-community/gemma-4-E4B-it-qat-4bit"),
   },
   {
-    id: "mlx-gemma-4-e4b-4bit-internetoftim",
-    name: "Gemma 4 E4B (MLX 4-bit, internetoftim build)",
-    // Produced and uploaded by scripts/gemma4-mlx/convert_and_upload.sh —
-    // requires an Apple Silicon Mac and an internetoftim HF write token.
-    hfRepo: "internetoftim/gemma-4-e4b-it-mlx-4bit",
-    baseModel: "google/gemma-4-E4B-it",
+    id: "mlx-gemma-4-e2b-4bit",
+    // Edge-tier build: E2B is the Gemma 4 successor to gemma-3n-E2B
+    // (MatFormer effective-2B), for Macs with 8 GB unified memory.
+    name: "Gemma 4 E2B (MLX 4-bit, official, edge/low-memory)",
+    hfRepo: "mlx-community/gemma-4-e2b-it-4bit",
+    baseModel: "google/gemma-4-E2B-it",
     quantBits: 4,
-    source: "self",
-    runCommand: RUN("internetoftim/gemma-4-e4b-it-mlx-4bit"),
+    source: "official",
+    runCommand: RUN("mlx-community/gemma-4-e2b-it-4bit"),
   },
 ];
