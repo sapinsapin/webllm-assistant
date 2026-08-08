@@ -34,7 +34,9 @@ if [[ "$(uname -s)/$(uname -m)" != "Darwin/arm64" ]]; then
 fi
 
 echo "==> Installing/refreshing mlx-vlm (Kimi-VL is multimodal — needs the kimi_vl model class)"
-pip install --upgrade mlx-vlm huggingface_hub
+# torch/torchvision: Kimi-VL's custom HF processor imports them (unlike
+# most mlx-vlm conversions, which are pure-MLX).
+pip install --upgrade mlx-vlm huggingface_hub torch torchvision
 
 echo "==> Checking mlx-vlm supports kimi_vl"
 python - <<'EOF'
