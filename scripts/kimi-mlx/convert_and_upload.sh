@@ -34,9 +34,10 @@ if [[ "$(uname -s)/$(uname -m)" != "Darwin/arm64" ]]; then
 fi
 
 echo "==> Installing/refreshing mlx-vlm (Kimi-VL is multimodal — needs the kimi_vl model class)"
-# torch/torchvision: Kimi-VL's custom HF processor imports them (unlike
-# most mlx-vlm conversions, which are pure-MLX).
-pip install --upgrade mlx-vlm huggingface_hub torch torchvision
+# Kimi-VL's custom HF processor/tokenizer code needs torch+torchvision and
+# a tiktoken tokenizer (blobfile is tiktoken's loader dep) — none of which
+# pure-MLX conversions normally require.
+pip install --upgrade mlx-vlm huggingface_hub torch torchvision tiktoken blobfile
 
 echo "==> Checking mlx-vlm supports kimi_vl"
 python - <<'EOF'
