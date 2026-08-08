@@ -48,7 +48,8 @@ parity-testing against the reference model requires it.
   fp16 @ 4K ctx); latent caching deferred to M3 as an optimization. Unit
   parity vs `transformers` DeepSeek-V3 on random weights (fp32 CPU,
   atol 1e-4). Exit: parity test green in the fork's CI.
-- **M2 — MoE dispatch (cloud, ~week)**: 2-layer toy `.tflite` export with
+- **M2 — MoE dispatch** ✅ **DONE 2026-08-08** — toy .tflite converted and
+  verified (see checkpoint log). Original scope below for reference: 2-layer toy `.tflite` export with
   the working `litert_moe_sequential` dense fallback first; in parallel,
   experiment with the `moe` custom op (its options hardcode gelu +
   renormalized weights today — DeepSeek needs SiLU + sigmoid/scaled; kernel
@@ -78,6 +79,25 @@ parity-testing against the reference model requires it.
 
 ## Checkpoint log
 
+- 2026-08-08 (M2 done): **toy `.tflite` works, numerically verified — no
+  converter blockers.** Real converter path on the M1 tiny config with
+  `litert_moe_sequential`: one flatbuffer, prefill+decode signatures,
+  fp32 decode logits match eager transformers at 4.8e-7; repo-standard
+  int8 dynamic-range recipe quantizes cleanly (5.08 → 1.60 MiB, diff
+  2.5e-2 = expected quant error). Fork commits 3347ceb/474b814/d81aa3d.
+  **`moe` custom-op probe — better than feared:** kernel is public
+  (google-ai-edge/LiteRT) and runs under the stock python interpreter;
+  DeepSeek's non-renormalized sigmoid weighting already works on the CPU
+  kernel (it ignores renormalized_top_weights); the ONLY CPU-path gap is
+  `activation='silu'` being rejected at prepare time — a genuinely small
+  upstream change. GPU parser is gelu-only + renormalize-required but
+  **accepts int4 expert weights**, revising M0's "no int4 path" finding.
+  M3 adjustments: (a) full convert derisked except pure scale (66 GB fp32
+  intermediate, >2 GB flatbuffer); (b) small upstream-LiteRT PR for SiLU
+  unlocks the fast path and makes M4's pruned artifact viable on the
+  custom op instead of the 2–4 tok/s dense fallback; (c) size the ~5 GB
+  artifact against the GPU delegate's int4 weight_type and extend
+  moe.py's weight_type to emit int4.
 - 2026-08-08 (M1 done): parity green end-to-end on tiny random-weight
   configs through the real export path (prefill + cached decode vs eager
   DeepseekV3ForCausalLM, atol 1e-4). Negative controls confirm both core
