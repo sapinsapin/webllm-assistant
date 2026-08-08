@@ -55,11 +55,12 @@ export const MACOS_MLX_KIMI: KimiMlxModel[] = [
     name: "Kimi VL A3B Instruct (MLX 4-bit, internetoftim build)",
     // No official -Instruct MLX conversion exists; produced by
     // scripts/kimi-mlx/convert_and_upload.sh on an Apple Silicon Mac.
+    // Published 2026-08-08, smoke-tested via mlx_vlm generate.
     hfRepo: "internetoftim/Kimi-VL-A3B-Instruct-mlx-4bit",
     baseModel: "moonshotai/Kimi-VL-A3B-Instruct",
     quantBits: 4,
     source: "self",
-    published: false,
+    published: true,
     minMemoryGB: 16,
     runCommand: RUN_VLM("internetoftim/Kimi-VL-A3B-Instruct-mlx-4bit"),
   },
