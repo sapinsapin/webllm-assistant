@@ -32,7 +32,16 @@ parity-testing against the reference model requires it.
   that exports `transformers` models without reauthoring. So M1/M2 below
   are re-scoped from "reimplement blocks" to "write a `deepseek_v3`
   model_ext + targeted patches".
-- **M1 — `export_hf/model_ext/deepseek_v3` (cloud, ~week)**: cache-shape
+- **M1 — `export_hf/model_ext/deepseek_v3`** ✅ **DONE 2026-08-08** —
+  landed on the fork (`internetoftim/litert-torch@kimi-moonlight-port`,
+  commits 5de5836/ca03ba9/86a230b): asymmetric K/V head-dim cache support,
+  attention output-reshape fix, static-shape noaux_tc router. 5/5 parity
+  tests green (router atol 1e-6, MoE 1e-5, full prefill+decode 1e-4);
+  26-test regression suite clean; torch.export + tfl decompositions
+  succeed. Experts needed zero patching (HF DeepseekV3Experts is directly
+  litert_moe_sequential-compatible). Correction from checkpoint: Moonlight
+  is top-**6** (not top-8), n_group=1, 26/27 layers MoE. Original scope
+  below for reference: cache-shape
   override for asymmetric head dims (k=192/v=128), attention output-reshape
   patch, noaux_tc router rewritten gemma4-style (static-shape mask
   arithmetic, no scatter_). Naive full-K/V cache is acceptable (≈1.1 GB
@@ -68,6 +77,17 @@ parity-testing against the reference model requires it.
 - Each cloud session ends by updating this file's checkpoint log below.
 
 ## Checkpoint log
+
+- 2026-08-08 (M1 done): parity green end-to-end on tiny random-weight
+  configs through the real export path (prefill + cached decode vs eager
+  DeepseekV3ForCausalLM, atol 1e-4). Negative controls confirm both core
+  fixes are load-bearing. Bonus: torch.export and torch_tfl decompositions
+  already succeed — no lowering blockers found. M2 start: run
+  export_lib's converter on the toy config with litert_moe_sequential and
+  numerically check the resulting .tflite; in parallel probe the `moe`
+  custom op (needs SiLU + non-renormalized sigmoid weights; kernel lives
+  in LiteRT proper). Deferred: latent caching, split-cache variant,
+  GPU-composite paths with asymmetric dims.
 
 - 2026-08-08 (later still): M1 started in a cloud session. Fork created:
   upstream renamed the repo too — it is now `google-ai-edge/litert-torch`
