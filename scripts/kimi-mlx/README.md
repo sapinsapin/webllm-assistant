@@ -47,10 +47,10 @@ needed.
 Kimi-VL cannot run in WebLLM (no vision-model support in the web runtime), so
 the web tier is **text-only** via the Moonlight tower:
 
-1. Verify `mlc-llm` supports the DeepSeek-V3-style MoE architecture that
-   `moonshotai/Moonlight-16B-A3B-Instruct` uses (DeepSeek-V2 support exists;
-   V3 delta must be checked — if missing, this phase is blocked upstream and
-   we file/track an mlc-llm issue instead of forking).
+1. ~~Verify `mlc-llm` supports the architecture~~ **Verified 2026-08-08:
+   mlc-llm registers `deepseek_v3`, and Moonlight-16B-A3B-Instruct is
+   `DeepseekV3ForCausalLM` — this phase is unblocked; it's compile work,
+   not architecture work.
 2. Compile `Moonlight-16B-A3B-Instruct` with `mlc_llm convert_weight` +
    `gen_config` at `q4f16_1`, package the WebGPU wasm, and publish as
    `internetoftim/Moonlight-16B-A3B-Instruct-q4f16_1-MLC`.
@@ -82,7 +82,9 @@ Why quantized conversion does not get Kimi onto phones:
 
 Decision: phones stay on the standard fallback chain (cloud endpoint when
 configured, else Gemma 4 E2B on-device). Revisit if Moonshot ships a sub-4B
-dense model or ai-edge-torch gains MoE/MLA.
+dense model or ai-edge-torch gains MoE/MLA. The long-running unblock —
+porting MLA + DeepSeek-MoE into ai-edge-torch ourselves — is now planned
+and tracked in `../kimi-mobile-port/PLAN.md`.
 
 Optional experiments (not on the roadmap; "because we can" territory —
 neither is expected to beat Gemma 4 E2B on quality-per-GB):

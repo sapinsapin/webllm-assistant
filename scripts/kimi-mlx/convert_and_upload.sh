@@ -38,7 +38,7 @@ pip install --upgrade mlx-vlm huggingface_hub
 
 echo "==> Checking mlx-vlm supports kimi_vl"
 python - <<'EOF'
-import importlib, sys
+import importlib.util, sys
 if importlib.util.find_spec("mlx_vlm.models.kimi_vl") is None:
     sys.exit("ERROR: this mlx-vlm build has no kimi_vl support — upgrade mlx-vlm.")
 print("kimi_vl model class found.")
