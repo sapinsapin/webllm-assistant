@@ -45,13 +45,16 @@ print("kimi_vl model class found.")
 EOF
 
 echo "==> Converting ${SRC} → ${OUT_DIR} (${BITS}-bit)"
-python -m mlx_vlm.convert \
+# --trust-remote-code: Kimi-VL ships its processor as custom code in the
+# official moonshotai HF repo; transformers refuses to load it without this.
+python -m mlx_vlm convert \
   --hf-path "${SRC}" \
   --mlx-path "${OUT_DIR}" \
-  -q --q-bits "${BITS}"
+  -q --q-bits "${BITS}" \
+  --trust-remote-code
 
 echo "==> Smoke test"
-python -m mlx_vlm.generate \
+python -m mlx_vlm generate \
   --model "${OUT_DIR}" \
   --prompt "Reply with the single word: ready" \
   --max-tokens 5
