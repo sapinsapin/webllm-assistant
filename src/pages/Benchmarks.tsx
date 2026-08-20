@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
 import { FrugalFlops } from "@/components/FrugalFlops";
+import { SpeechBench } from "@/components/SpeechBench";
 
 interface PerPromptResult {
   prompt: string;
@@ -290,6 +291,9 @@ export default function Benchmarks() {
 
           {/* Runnable Test Suite */}
           <BenchmarkSuite onComplete={() => fetchRuns()} />
+
+          {/* Speech (ASR / TTS) benchmarks */}
+          <SpeechBench />
 
           {/* Geographic Heatmap */}
           <BenchmarkHeatmap />
