@@ -43,7 +43,7 @@ export function SpeechBench() {
   const [asrResult, setAsrResult] = useState<AsrBenchmarkResult | null>(null);
   const [ttsResult, setTtsResult] = useState<TtsBenchmarkResult | null>(null);
 
-  const [repoInput, setRepoInput] = useState("sapinsapin/whisper-small-fsc");
+  const [repoInput, setRepoInput] = useState("sapinsapin/whisper-small-fsc-ONNX");
   const [checking, setChecking] = useState(false);
   const [support, setSupport] = useState<RuntimeSupport | null>(null);
 
