@@ -53,7 +53,13 @@ jobs:
           cache-dependency-path: transformers-js/scripts/requirements.txt
 
       - name: Install conversion dependencies
+        # The pinned requirements pull onnx_graphsurgeon==0.3.27 from NVIDIA's
+        # pypi.ngc.nvidia.com index, which no longer resolves — and that version
+        # was never published to PyPI. Drop the dead index and let pip take the
+        # PyPI release of onnx_graphsurgeon instead.
         run: |
+          sed -i '/pypi\.ngc\.nvidia\.com/d' transformers-js/scripts/requirements.txt
+          sed -i 's/^onnx_graphsurgeon==.*/onnx_graphsurgeon/' transformers-js/scripts/requirements.txt
           pip install -r transformers-js/scripts/requirements.txt
           pip install "huggingface_hub>=0.24"
 
