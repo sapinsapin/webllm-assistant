@@ -70,8 +70,15 @@ jobs:
           pip install --no-deps "tokenizers>=0.20.3,<0.21"
           # transformers 4.43.4 hard-rejects tokenizers 0.20 at import time via
           # its dependency_versions_table; widen the declared ceiling in place.
-          sed -i 's/tokenizers>=0.19,<0.20/tokenizers>=0.19,<0.21/' \
-            "$(python -c 'import transformers.dependency_versions_table as t; print(t.__file__)')"
+          # Locate the file WITHOUT importing transformers (importing it raises
+          # the very ImportError being patched).
+          python - <<'EOF'
+          import importlib.util, pathlib
+          pkg = pathlib.Path(importlib.util.find_spec("transformers").origin).parent
+          table = pkg / "dependency_versions_table.py"
+          table.write_text(table.read_text().replace("tokenizers>=0.19,<0.20", "tokenizers>=0.19,<0.21"))
+          print(f"patched {table}")
+          EOF
 
       - name: Convert to ONNX (+ quantized variants)
         working-directory: transformers-js
