@@ -62,6 +62,12 @@ jobs:
           sed -i 's/^onnx_graphsurgeon==.*/onnx_graphsurgeon/' transformers-js/scripts/requirements.txt
           pip install -r transformers-js/scripts/requirements.txt
           pip install "huggingface_hub>=0.24"
+          # The sapinsapin fine-tunes were saved with tokenizers >=0.20 (new
+          # tokenizer.json merges format); the pinned tokenizers 0.19.1 fails
+          # to parse it ("did not match any variant of untagged enum
+          # ModelWrapper"). 0.20.x keeps the same Python API, so install it
+          # without letting pip downgrade the rest of the stack.
+          pip install --no-deps "tokenizers>=0.20.3,<0.21"
 
       - name: Convert to ONNX (+ quantized variants)
         working-directory: transformers-js
