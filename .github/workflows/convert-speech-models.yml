@@ -68,6 +68,10 @@ jobs:
           # ModelWrapper"). 0.20.x keeps the same Python API, so install it
           # without letting pip downgrade the rest of the stack.
           pip install --no-deps "tokenizers>=0.20.3,<0.21"
+          # transformers 4.43.4 hard-rejects tokenizers 0.20 at import time via
+          # its dependency_versions_table; widen the declared ceiling in place.
+          sed -i 's/tokenizers>=0.19,<0.20/tokenizers>=0.19,<0.21/' \
+            "$(python -c 'import transformers.dependency_versions_table as t; print(t.__file__)')"
 
       - name: Convert to ONNX (+ quantized variants)
         working-directory: transformers-js
