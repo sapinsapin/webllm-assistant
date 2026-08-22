@@ -19,7 +19,21 @@ const XENOVA_DOCS = "https://huggingface.co/datasets/Xenova/transformers.js-docs
 
 export const SPEAKER_EMBEDDING_URL = `${XENOVA_DOCS}/speaker_embeddings/cmu_us_slt_arctic-wav-arctic_a0508.bin`;
 
+/**
+ * Default models (first entry of each list) are the sapinsapin fine-tunes,
+ * exported to ONNX for the browser runtime by
+ * `.github/workflows/convert-speech-models.yml`.
+ */
 export const ASR_MODELS: SpeechModelPreset[] = [
+  {
+    id: "whisper-small-fsc",
+    name: "Whisper Small FSC (Filipino)",
+    task: "asr",
+    repo: "sapinsapin/whisper-small-fsc-ONNX",
+    size: "~250MB",
+    description:
+      "sapinsapin's Filipino (Tagalog/Taglish) Whisper fine-tune, ONNX export for in-browser inference.",
+  },
   {
     id: "whisper-tiny-en",
     name: "Whisper Tiny (en)",
@@ -55,6 +69,16 @@ export const ASR_MODELS: SpeechModelPreset[] = [
 ];
 
 export const TTS_MODELS: SpeechModelPreset[] = [
+  {
+    id: "speecht5-fsc",
+    name: "SpeechT5 FSC (Filipino)",
+    task: "tts",
+    repo: "sapinsapin/speecht5_tts-fsc-ONNX",
+    size: "~140MB",
+    description:
+      "sapinsapin's Filipino (Tagalog/Taglish) SpeechT5 fine-tune, ONNX export for in-browser inference.",
+    speakerEmbeddings: SPEAKER_EMBEDDING_URL,
+  },
   {
     id: "speecht5",
     name: "SpeechT5 TTS (en)",

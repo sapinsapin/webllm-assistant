@@ -1,0 +1,77 @@
+# Converts the sapinsapin ASR/TTS fine-tunes to ONNX (Transformers.js layout,
+# with fp16/q8/int8/uint8/q4/bnb4 quantized variants) and uploads them to the
+# Hugging Face Hub as <source>-ONNX repos.
+#
+# Runs on GitHub runners because model download/upload needs open network
+# access. Requires an `HF_TOKEN` repository secret: a Hugging Face WRITE token
+# authorized for the target owner (sapinsapin).
+name: Convert speech models to ONNX
+
+on:
+  workflow_dispatch:
+    inputs:
+      asr_model:
+        description: "Source ASR model (PyTorch Hub repo id)"
+        default: "sapinsapin/whisper-small-fsc"
+        type: string
+      tts_model:
+        description: "Source TTS model (PyTorch Hub repo id)"
+        default: "sapinsapin/speecht5_tts-fsc"
+        type: string
+      target_owner:
+        description: "Hub owner/org for the converted -ONNX repos"
+        default: "sapinsapin"
+        type: string
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: ${{ inputs.asr_model }}
+            task: auto # whisper → automatic-speech-recognition (+past), inferred
+            pipeline_tag: automatic-speech-recognition
+          - source: ${{ inputs.tts_model }}
+            task: text-to-audio # speecht5 export bundles the HiFiGAN vocoder
+            pipeline_tag: text-to-speech
+    steps:
+      - uses: actions/checkout@v4
+
+      # The conversion script lives on the v3 branch of transformers.js.
+      - uses: actions/checkout@v4
+        with:
+          repository: huggingface/transformers.js
+          ref: v3
+          path: transformers-js
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: transformers-js/scripts/requirements.txt
+
+      - name: Install conversion dependencies
+        run: |
+          pip install -r transformers-js/scripts/requirements.txt
+          pip install "huggingface_hub>=0.24"
+
+      - name: Convert to ONNX (+ quantized variants)
+        working-directory: transformers-js
+        run: |
+          python -m scripts.convert \
+            --quantize \
+            --model_id "${{ matrix.source }}" \
+            --task "${{ matrix.task }}"
+
+      - name: Upload to the Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          SOURCE="${{ matrix.source }}"
+          python scripts/upload_speech_onnx.py \
+            --converted "transformers-js/models/${SOURCE}" \
+            --source "${SOURCE}" \
+            --target "${{ inputs.target_owner }}/$(basename "${SOURCE}")-ONNX" \
+            --pipeline-tag "${{ matrix.pipeline_tag }}"
