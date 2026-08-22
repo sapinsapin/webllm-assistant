@@ -60,6 +60,11 @@ jobs:
         run: |
           sed -i '/pypi\.ngc\.nvidia\.com/d' transformers-js/scripts/requirements.txt
           sed -i 's/^onnx_graphsurgeon==.*/onnx_graphsurgeon/' transformers-js/scripts/requirements.txt
+          # The requirements leave torch unpinned; current torch (>=2.9) routes
+          # torch.onnx.export through the dynamo exporter, which needs
+          # onnxscript and changes export semantics optimum 1.21 relies on.
+          # Pin the period-correct torch (legacy exporter built in), CPU build.
+          pip install "torch==2.4.1" --index-url https://download.pytorch.org/whl/cpu
           pip install -r transformers-js/scripts/requirements.txt
           pip install "huggingface_hub>=0.24"
           # The sapinsapin fine-tunes were saved with tokenizers >=0.20 (new
