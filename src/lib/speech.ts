@@ -20,7 +20,8 @@ export interface SpeechModelPreset {
 
 const XENOVA_DOCS = "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main";
 
-export const SPEAKER_EMBEDDING_URL = `${XENOVA_DOCS}/speaker_embeddings/cmu_us_slt_arctic-wav-arctic_a0508.bin`;
+export const SPEAKER_EMBEDDING_URL = `${XENOVA_DOCS}/speaker_embeddings.bin`;
+
 
 /**
  * Default models (first entry of each list) are ONNX exports of the
