@@ -312,7 +312,12 @@ export async function runAsrBenchmark(
 
   onProgress(98, "Transcribing…");
   const inferStart = performance.now();
-  const out = await transcriber(audio.data, { chunk_length_s: 30, stride_length_s: 5 });
+  const out = await transcriber(audio.data, {
+    chunk_length_s: 30,
+    stride_length_s: 5,
+    ...(model.language ? { language: model.language, task: "transcribe" } : {}),
+  });
+
   const inferMs = performance.now() - inferStart;
 
   await transcriber.dispose?.();
