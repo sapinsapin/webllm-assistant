@@ -75,15 +75,16 @@ export const ASR_MODELS: SpeechModelPreset[] = [
 
 export const TTS_MODELS: SpeechModelPreset[] = [
   {
-    id: "speecht5-fsc",
-    name: "SpeechT5 FSC (Filipino)",
+    id: "speecht5-pld-fil",
+    name: "SpeechT5 PLD-FIL (Filipino)",
     task: "tts",
-    repo: "sapinsapin/speecht5_tts-fsc-ONNX",
-    size: "~140MB",
+    repo: "internetoftim/speecht5_tts-pld-fil-ONNX",
+    size: "~180MB (q8)",
     description:
-      "sapinsapin's Filipino (Tagalog/Taglish) SpeechT5 fine-tune, ONNX export for in-browser inference.",
+      "sapinsapin's Filipino SpeechT5 fine-tune, converted to ONNX (HiFi-GAN vocoder bundled).",
     speakerEmbeddings: SPEAKER_EMBEDDING_URL,
   },
+
   {
     id: "speecht5",
     name: "SpeechT5 TTS (en)",
