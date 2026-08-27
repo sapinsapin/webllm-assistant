@@ -13,7 +13,10 @@ export interface SpeechModelPreset {
   description: string;
   /** SpeechT5-style models need an external speaker embedding */
   speakerEmbeddings?: string;
+  /** Forced transcription language for fine-tuned Whisper checkpoints */
+  language?: string;
 }
+
 
 const XENOVA_DOCS = "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main";
 
