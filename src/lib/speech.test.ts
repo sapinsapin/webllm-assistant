@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { ASR_MODELS, TTS_MODELS, speechVerdict } from "./speech";
 
 describe("speech model presets", () => {
-  it("defaults to the sapinsapin ONNX exports (first entry is the UI default)", () => {
-    expect(ASR_MODELS[0].repo).toBe("sapinsapin/whisper-small-fsc-ONNX");
-    expect(TTS_MODELS[0].repo).toBe("sapinsapin/speecht5_tts-fsc-ONNX");
+  it("defaults to the converted Philippine-language ONNX exports (first entry is the UI default)", () => {
+    expect(ASR_MODELS[0].repo).toBe("internetoftim/whisper-small-pld-fil-ONNX");
+    expect(TTS_MODELS[0].repo).toBe("internetoftim/speecht5_tts-pld-fil-ONNX");
   });
+
 
   it("keeps tasks consistent per list", () => {
     for (const m of ASR_MODELS) expect(m.task).toBe("asr");

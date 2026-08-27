@@ -13,27 +13,33 @@ export interface SpeechModelPreset {
   description: string;
   /** SpeechT5-style models need an external speaker embedding */
   speakerEmbeddings?: string;
+  /** Forced transcription language for fine-tuned Whisper checkpoints */
+  language?: string;
 }
+
 
 const XENOVA_DOCS = "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main";
 
-export const SPEAKER_EMBEDDING_URL = `${XENOVA_DOCS}/speaker_embeddings/cmu_us_slt_arctic-wav-arctic_a0508.bin`;
+export const SPEAKER_EMBEDDING_URL = `${XENOVA_DOCS}/speaker_embeddings.bin`;
+
 
 /**
- * Default models (first entry of each list) are the sapinsapin fine-tunes,
- * exported to ONNX for the browser runtime by
- * `.github/workflows/convert-speech-models.yml`.
+ * Default models (first entry of each list) are ONNX exports of the
+ * sapinsapin Philippine-language fine-tunes, converted with
+ * `optimum-cli export onnx` + dynamic q8 quantization.
  */
 export const ASR_MODELS: SpeechModelPreset[] = [
   {
-    id: "whisper-small-fsc",
-    name: "Whisper Small FSC (Filipino)",
+    id: "whisper-small-pld-fil",
+    name: "Whisper Small PLD-FIL (Filipino)",
     task: "asr",
-    repo: "sapinsapin/whisper-small-fsc-ONNX",
-    size: "~250MB",
+    repo: "internetoftim/whisper-small-pld-fil-ONNX",
+    size: "~287MB (q8)",
     description:
-      "sapinsapin's Filipino (Tagalog/Taglish) Whisper fine-tune, ONNX export for in-browser inference.",
+      "sapinsapin's Filipino Whisper fine-tune, converted to ONNX for in-browser inference.",
+    language: "tl",
   },
+
   {
     id: "whisper-tiny-en",
     name: "Whisper Tiny (en)",
@@ -70,15 +76,16 @@ export const ASR_MODELS: SpeechModelPreset[] = [
 
 export const TTS_MODELS: SpeechModelPreset[] = [
   {
-    id: "speecht5-fsc",
-    name: "SpeechT5 FSC (Filipino)",
+    id: "speecht5-pld-fil",
+    name: "SpeechT5 PLD-FIL (Filipino)",
     task: "tts",
-    repo: "sapinsapin/speecht5_tts-fsc-ONNX",
-    size: "~140MB",
+    repo: "internetoftim/speecht5_tts-pld-fil-ONNX",
+    size: "~180MB (q8)",
     description:
-      "sapinsapin's Filipino (Tagalog/Taglish) SpeechT5 fine-tune, ONNX export for in-browser inference.",
+      "sapinsapin's Filipino SpeechT5 fine-tune, converted to ONNX (HiFi-GAN vocoder bundled).",
     speakerEmbeddings: SPEAKER_EMBEDDING_URL,
   },
+
   {
     id: "speecht5",
     name: "SpeechT5 TTS (en)",
@@ -306,7 +313,12 @@ export async function runAsrBenchmark(
 
   onProgress(98, "Transcribing…");
   const inferStart = performance.now();
-  const out = await transcriber(audio.data, { chunk_length_s: 30, stride_length_s: 5 });
+  const out = await transcriber(audio.data, {
+    chunk_length_s: 30,
+    stride_length_s: 5,
+    ...(model.language ? { language: model.language, task: "transcribe" } : {}),
+  });
+
   const inferMs = performance.now() - inferStart;
 
   await transcriber.dispose?.();
