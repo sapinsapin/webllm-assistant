@@ -13,6 +13,7 @@ import { BENCHMARK_PROMPTS } from "@/lib/models";
 import { CommunityBenchmarks } from "@/components/CommunityBenchmarks";
 import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
 import { FrugalFlops } from "@/components/FrugalFlops";
+import { WaitlistSignup } from "@/components/WaitlistSignup";
 
 type Phase = "idle" | "downloading" | "ready_to_bench" | "benchmarking" | "done";
 
@@ -511,6 +512,9 @@ export function QuickStart({
   // --- IDLE / DOWNLOADING / BENCHMARKING SCREEN ---
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6 select-none">
+      {/* Waitlist signup */}
+      <WaitlistSignup />
+
       {/* Logo + Gemma 4 toggle */}
       <div className="text-center space-y-3">
         <h1 className="text-4xl font-bold tracking-tight font-mono">
