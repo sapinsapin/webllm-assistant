@@ -7,12 +7,10 @@ import { QuickStart } from "@/components/QuickStart";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { BenchmarkPanel } from "@/components/BenchmarkPanel";
-import { CloudChat } from "@/components/CloudChat";
-import { C2CChat } from "@/components/C2CChat";
 import { EvalsPanel } from "@/components/EvalsPanel";
-import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, Cloud, ArrowRightLeft, ClipboardCheck } from "lucide-react";
+import { Cpu, MessageSquare, BarChart3, RotateCcw, Zap, Globe, Server, History, ClipboardCheck } from "lucide-react";
 
-type Tab = "chat" | "benchmark" | "evals" | "cloud" | "c2c";
+type Tab = "chat" | "benchmark" | "evals";
 
 const ENGINE_BADGE: Record<string, { icon: React.ReactNode; label: string }> = {
   mediapipe: { icon: <Zap className="h-3 w-3" />, label: "MediaPipe" },
@@ -41,7 +39,7 @@ const Index = () => {
   const engineInfo = activeEngine ? ENGINE_BADGE[activeEngine] : null;
 
   // Show quick start when user hasn't explicitly dismissed it
-  const showQuickStart = !quickStartDismissed && !advancedMode && activeTab !== "cloud" && activeTab !== "c2c";
+  const showQuickStart = !quickStartDismissed && !advancedMode;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -53,7 +51,7 @@ const Index = () => {
         <meta property="og:title" content="Can I AI? — Run LLMs Locally" />
         <meta property="og:description" content="Free browser tool to benchmark on-device AI. Test Gemma locally and compare tokens/sec vs cloud APIs." />
       </Helmet>
-      {/* Header — hide in quick start mode for cleaner look, but show in cloud mode */}
+      {/* Header — hidden in quick start mode for a cleaner first run */}
       {!showQuickStart && (
         <header className="flex items-center gap-2 border-b border-border px-6 py-3">
           <Cpu className="h-5 w-5 text-primary" />
@@ -75,26 +73,6 @@ const Index = () => {
                   }`}
                 >
                   <MessageSquare className="h-3 w-3" /> Chat
-                </button>
-                <button
-                  onClick={() => setActiveTab("cloud")}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                    activeTab === "cloud"
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Cloud className="h-3 w-3" /> Cloud
-                </button>
-                <button
-                  onClick={() => setActiveTab("c2c")}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                    activeTab === "c2c"
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <ArrowRightLeft className="h-3 w-3" /> C2C
                 </button>
                 <button
                   onClick={() => setActiveTab("benchmark")}
@@ -146,15 +124,6 @@ const Index = () => {
                 </button>
               </div>
             </>
-          ) : activeTab === "cloud" || activeTab === "c2c" ? (
-            <div className="ml-auto">
-              <button
-                onClick={() => setActiveTab("chat")}
-                className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs text-muted-foreground transition-all hover:text-foreground hover:border-muted-foreground/40"
-              >
-                <RotateCcw className="h-3 w-3" /> Back
-              </button>
-            </div>
           ) : null}
         </header>
       )}
@@ -170,17 +139,11 @@ const Index = () => {
             capabilities={capabilities}
             onLoadModel={loadModel}
             onAdvancedMode={() => { setAdvancedMode(true); setQuickStartDismissed(true); }}
-            onCloudChat={() => setActiveTab("cloud")}
-            onC2CChat={() => setActiveTab("c2c")}
             onRunBenchmark={runBenchmarkPrompt}
             onRunLongContext={runLongContextBenchmark}
             onRunMultiTurn={runMultiTurnBenchmark}
             onRunConcurrent={runConcurrentBenchmark}
           />
-        ) : activeTab === "cloud" ? (
-          <CloudChat />
-        ) : activeTab === "c2c" ? (
-          <C2CChat />
         ) : status !== "ready" ? (
           <div className="flex flex-1 items-center justify-center p-6">
             <ModelLoader
