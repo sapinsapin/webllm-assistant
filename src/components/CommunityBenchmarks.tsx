@@ -24,7 +24,21 @@ interface BenchRun {
   gpu: string | null;
   gpu_vendor: string | null;
   screen_res: string | null;
+  // Methodology 2026.09 columns — NULL on legacy rows (fall back to avg_tps).
+  overall_score: number | null;
+  division: string | null;
+  result_tier: string | null;
+  latency_class: string | null;
+  ttft_p90_ms: number | null;
+  spec_version: string | null;
 }
+
+const TIER_BADGE: Record<string, { label: string; cls: string }> = {
+  certified: { label: "✓ certified", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" },
+  valid: { label: "unranked", cls: "text-amber-400 border-amber-400/30 bg-amber-400/10" },
+  invalid: { label: "invalid", cls: "text-red-400 border-red-400/30 bg-red-400/10" },
+  reported: { label: "reported", cls: "text-muted-foreground border-border bg-secondary/30" },
+};
 
 const VERDICT_STYLE: Record<string, string> = {
   Great: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
@@ -34,6 +48,9 @@ const VERDICT_STYLE: Record<string, string> = {
   "Did not finish": "text-muted-foreground bg-secondary/30 border-border",
   Crashed: "text-red-400 bg-red-400/10 border-red-400/20",
   "Yes, you can AI!": "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
+  "Mostly, yes": "text-amber-400 bg-amber-400/10 border-amber-400/20",
+  "Barely…": "text-orange-400 bg-orange-400/10 border-orange-400/20",
+  "No, not yet": "text-red-400 bg-red-400/10 border-red-400/20",
 };
 
 const VERDICT_EMOJI: Record<string, string> = {
@@ -44,6 +61,9 @@ const VERDICT_EMOJI: Record<string, string> = {
   "Did not finish": "⏳",
   Crashed: "💥",
   "Yes, you can AI!": "🚀",
+  "Mostly, yes": "👍",
+  "Barely…": "🐢",
+  "No, not yet": "⛔",
 };
 
 function DeviceIcon({ type }: { type: string | null }) {
@@ -70,7 +90,7 @@ async function fetchBenchmarkPage(page: number): Promise<{ runs: BenchRun[]; tot
   const to = from + PAGE_SIZE - 1;
   const { data, count, error } = await supabase
     .from("benchmark_runs")
-    .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res", { count: "exact" })
+    .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res,overall_score,division,result_tier,latency_class,ttft_p90_ms,spec_version", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
   if (error) throw new Error(error.message);
@@ -179,9 +199,14 @@ export function CommunityBenchmarks() {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
+                  {run.result_tier && TIER_BADGE[run.result_tier] && (
+                    <span className={`hidden sm:inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-mono ${TIER_BADGE[run.result_tier].cls}`}>
+                      {TIER_BADGE[run.result_tier].label}
+                    </span>
+                  )}
                   <div className="text-right">
                     <span className="font-mono text-sm font-semibold text-foreground">
-                      {run.avg_tps.toFixed(1)}
+                      {(run.overall_score ?? run.avg_tps).toFixed(1)}
                     </span>
                     <span className="text-[10px] text-muted-foreground ml-1">tok/s</span>
                   </div>
@@ -283,6 +308,34 @@ export function CommunityBenchmarks() {
                       <span className="text-muted-foreground">Avg TTFT:</span>
                       <span className="text-foreground font-medium">{run.avg_ttft_ms.toFixed(0)} ms</span>
                     </div>
+                    {run.spec_version && (
+                      <>
+                        {run.ttft_p90_ms != null && (
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-muted-foreground">TTFT p90:</span>
+                            <span className="text-foreground font-medium">{run.ttft_p90_ms.toFixed(0)} ms</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">Division:</span>
+                          <span className="text-foreground font-medium capitalize">{run.division ?? "open"}</span>
+                        </div>
+                        {run.latency_class && (
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-muted-foreground">Latency class:</span>
+                            <span className="text-foreground font-medium capitalize">{run.latency_class}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <Cpu className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">Methodology:</span>
+                          <span className="text-foreground font-medium">{run.spec_version}</span>
+                        </div>
+                      </>
+                    )}
                     {(run.city || run.country) && (
                       <div className="flex items-center gap-1.5">
                         <MapPin className="h-3 w-3 text-muted-foreground" />

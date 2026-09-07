@@ -39,6 +39,19 @@ export type Database = {
           screen_res: string | null
           user_agent: string | null
           verdict: string
+          spec_version: string | null
+          division: string | null
+          model_id: string | null
+          overall_score: number | null
+          ttft_p90_ms: number | null
+          tpot_p50_ms: number | null
+          latency_class: string | null
+          quality_score: number | null
+          result_tier: string | null
+          validity: Json | null
+          stats: Json | null
+          conditions: Json | null
+          engine_version: string | null
         }
         Insert: {
           avg_tps: number
@@ -64,6 +77,19 @@ export type Database = {
           screen_res?: string | null
           user_agent?: string | null
           verdict: string
+          spec_version?: string | null
+          division?: string | null
+          model_id?: string | null
+          overall_score?: number | null
+          ttft_p90_ms?: number | null
+          tpot_p50_ms?: number | null
+          latency_class?: string | null
+          quality_score?: number | null
+          result_tier?: string | null
+          validity?: Json | null
+          stats?: Json | null
+          conditions?: Json | null
+          engine_version?: string | null
         }
         Update: {
           avg_tps?: number
@@ -89,6 +115,19 @@ export type Database = {
           screen_res?: string | null
           user_agent?: string | null
           verdict?: string
+          spec_version?: string | null
+          division?: string | null
+          model_id?: string | null
+          overall_score?: number | null
+          ttft_p90_ms?: number | null
+          tpot_p50_ms?: number | null
+          latency_class?: string | null
+          quality_score?: number | null
+          result_tier?: string | null
+          validity?: Json | null
+          stats?: Json | null
+          conditions?: Json | null
+          engine_version?: string | null
         }
         Relationships: []
       }

@@ -145,6 +145,15 @@ Real models are never downloaded in tests — engines are mocked at the
 
 Before pushing: `npm test && npm run lint && npm run build` must all pass.
 
+## Benchmark methodology
+
+The benchmark follows an MLPerf-style methodology (round **2026.09**): single-stream
+percentiles (TTFT p90, TPS p50), a geometric-mean overall score over base
+categories, closed/open divisions, a quality gate, validity rules and result tiers.
+Rules live in [docs/BENCHMARK_METHODOLOGY.md](./docs/BENCHMARK_METHODOLOGY.md);
+the implementation is `src/lib/benchmark/spec.ts` (pure, tested), mirrored by the
+public MCP server (parity-tested).
+
 ## Platform support
 
 There is no native iOS/Android/macOS app — every platform runs the same web
