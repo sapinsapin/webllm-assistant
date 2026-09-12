@@ -19,6 +19,7 @@ import {
 } from "@/lib/benchmark/spec";
 import { captureRunConditions, type RunConditions } from "@/lib/benchmark/conditions";
 import { EVAL_PROMPTS, computeScore, scoreResponse } from "@/lib/evals";
+import { isSchemaMismatch, stripMethodologyColumns } from "@/lib/supabaseCompat";
 
 type Phase = "idle" | "downloading" | "benchmarking" | "done";
 
@@ -355,9 +356,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     setSubmitting(true);
     const allResults = agg.flatMap(a => a.runs);
     try {
-      const { data, error } = await supabase
-        .from("benchmark_runs")
-        .insert({
+      const row = {
           model_name: allResults[0]?.modelName || "Unknown",
           engine,
           avg_tps: avgTpsVal,
@@ -391,9 +390,16 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           device_type: device.deviceType,
           country: device.country, city: device.city,
           latitude: device.latitude, longitude: device.longitude,
-        })
-        .select("id")
-        .single();
+      };
+      let { data, error } = await supabase.from("benchmark_runs").insert(row).select("id").single();
+      if (error && isSchemaMismatch(error)) {
+        // Frontend shipped before `supabase db push`: keep the result (legacy
+        // columns) rather than losing it, and say so.
+        ({ data, error } = await supabase.from("benchmark_runs").insert(stripMethodologyColumns(row)).select("id").single());
+        if (!error) {
+          toast({ title: "Saved without methodology fields", description: "The database migration for round " + METHODOLOGY_VERSION + " isn't applied yet; score details were kept locally only." });
+        }
+      }
       if (error) {
         console.error("Failed to save benchmark:", error);
         toast({ title: "Couldn't save result", description: error.message, variant: "destructive" });

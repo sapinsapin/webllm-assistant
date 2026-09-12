@@ -63,15 +63,22 @@ describe("Leaderboard states", () => {
   });
 
   it("shows an error with retry when the fetch fails — never the empty board", async () => {
-    h.limitMock.mockResolvedValue({ data: null, error: { message: "relation does not exist" } });
+    h.limitMock.mockResolvedValue({ data: null, error: { code: "42501", message: "permission denied for view" } });
     renderWithQuery(<Leaderboard />);
     // The component sets retry: 2 (overriding the client default), so the
     // error surfaces only after React Query's backoff — wait for it.
     expect(await screen.findByText("Couldn't load the leaderboard", {}, { timeout: 8000 })).toBeInTheDocument();
-    expect(screen.getByText("relation does not exist")).toBeInTheDocument();
+    expect(screen.getByText("permission denied for view")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
     expect(screen.queryByText(/No certified/)).not.toBeInTheDocument();
   }, 15_000);
+
+  it("reports 'not available yet' (not an error) when the view hasn't been migrated", async () => {
+    h.limitMock.mockResolvedValue({ data: null, error: { code: "PGRST205", message: "Could not find the table 'public.benchmark_leaderboard' in the schema cache" } });
+    renderWithQuery(<Leaderboard />);
+    expect(await screen.findByText(/Leaderboard not available yet/)).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load the leaderboard")).not.toBeInTheDocument();
+  });
 
   it("shows the empty state only for a successful empty result", async () => {
     h.limitMock.mockResolvedValue({ data: [], error: null });

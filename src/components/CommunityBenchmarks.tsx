@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ChevronLeft, ChevronRight, ChevronDown, AlertCircle, RotateCcw } from "lucide-react";
 import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin, HardDrive, MemoryStick } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { isSchemaMismatch } from "@/lib/supabaseCompat";
 
 interface BenchRun {
   id: string;
@@ -88,13 +89,23 @@ const PAGE_SIZE = 10;
 async function fetchBenchmarkPage(page: number): Promise<{ runs: BenchRun[]; totalCount: number }> {
   const from = page * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
-  const { data, count, error } = await supabase
-    .from("benchmark_runs")
-    .select("id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res,overall_score,division,result_tier,latency_class,ttft_p90_ms,spec_version", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  const LEGACY_COLS = "id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res";
+  const METHODOLOGY_COLS = "overall_score,division,result_tier,latency_class,ttft_p90_ms,spec_version";
+  const fetchPage = (cols: string) =>
+    supabase
+      .from("benchmark_runs")
+      .select(cols, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+  let { data, count, error } = await fetchPage(`${LEGACY_COLS},${METHODOLOGY_COLS}`);
+  // Frontend may ship before `supabase db push` — degrade to legacy columns
+  // (methodology fields render as absent) instead of an error state.
+  if (error && isSchemaMismatch(error)) {
+    ({ data, count, error } = await fetchPage(LEGACY_COLS));
+  }
   if (error) throw new Error(error.message);
-  return { runs: (data as BenchRun[]) ?? [], totalCount: count ?? 0 };
+  return { runs: (data as unknown as BenchRun[]) ?? [], totalCount: count ?? 0 };
 }
 
 export function CommunityBenchmarks() {

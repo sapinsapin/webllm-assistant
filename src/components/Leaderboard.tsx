@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { AlertCircle, RotateCcw, Trophy, Smartphone, Monitor, Tablet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isSchemaMismatch } from "@/lib/supabaseCompat";
 import { METHODOLOGY_VERSION, type Division } from "@/lib/benchmark/spec";
 import {
   CONFIDENCE_LABEL,
@@ -15,7 +16,7 @@ const LIMIT = 50;
 
 /** Fetch the per-device leaderboard for one round + division. Throws on
  * error so React Query surfaces a real error state — never an empty board. */
-async function fetchLeaderboard(division: Division): Promise<LeaderboardRow[]> {
+async function fetchLeaderboard(division: Division): Promise<{ unavailable: boolean; rows: LeaderboardRow[] }> {
   const { data, error } = await supabase
     .from("benchmark_leaderboard")
     .select("*")
@@ -23,8 +24,11 @@ async function fetchLeaderboard(division: Division): Promise<LeaderboardRow[]> {
     .eq("division", division)
     .order("score_p50", { ascending: false })
     .limit(LIMIT);
+  // The view arrives with the 2026.09 migration; until `supabase db push`
+  // runs, report "not available yet" rather than a fetch error.
+  if (error && isSchemaMismatch(error)) return { unavailable: true, rows: [] };
   if (error) throw new Error(error.message);
-  return (data as LeaderboardRow[]) ?? [];
+  return { unavailable: false, rows: (data as LeaderboardRow[]) ?? [] };
 }
 
 function DeviceIcon({ type }: { type: string | null }) {
@@ -52,7 +56,8 @@ export function Leaderboard() {
     staleTime: 60_000,
   });
 
-  const rows = rankLeaderboard(data ?? []);
+  const rows = rankLeaderboard(data?.rows ?? []);
+  const unavailable = data?.unavailable ?? false;
   const engines = [...new Set(rows.map((r) => r.engine))].sort();
   const visible = engineFilter ? rows.filter((r) => r.engine === engineFilter) : rows;
 
@@ -104,6 +109,10 @@ export function Leaderboard() {
             <RotateCcw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} /> Try again
           </button>
         </div>
+      ) : unavailable ? (
+        <p className="text-center text-sm text-muted-foreground py-8 px-4">
+          Leaderboard not available yet — it appears once the {METHODOLOGY_VERSION} database migration is applied.
+        </p>
       ) : rows.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground py-8 px-4">
           No certified {division}-division runs in round {METHODOLOGY_VERSION} yet. Run the test suite to be first.
