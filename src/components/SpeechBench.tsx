@@ -70,6 +70,8 @@ export function SpeechBench() {
 
   const runTts = async () => {
     const model = TTS_MODELS.find((m) => m.id === ttsModel)!;
+    // Blob URLs are never garbage-collected on their own — release the previous run's audio.
+    if (ttsResult) URL.revokeObjectURL(ttsResult.audioUrl);
     setRunning(true); setError(null); setTtsResult(null); setProgress(0);
     try {
       setTtsResult(await runTtsBenchmark(model, ttsSentence, onProgress));
