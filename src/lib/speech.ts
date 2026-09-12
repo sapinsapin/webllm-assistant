@@ -40,12 +40,10 @@ export const ASR_MODELS: SpeechModelPreset[] = [
     name: "Whisper Small PLD-FIL (Filipino)",
     task: "asr",
     repo: "internetoftim/whisper-small-pld-fil-ONNX",
-    size: "~287MB (q8)",
+    size: "~250MB",
     description:
       "sapinsapin's Filipino Whisper fine-tune, converted to ONNX for in-browser inference.",
     language: "tl",
-    // The repo ships only fp32 + q8 variants — no q4 decoder for WebGPU.
-    wasmOnly: true,
   },
 
   {

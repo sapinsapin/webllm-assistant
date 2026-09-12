@@ -7,11 +7,11 @@ describe("speech model presets", () => {
     expect(TTS_MODELS[0].repo).toBe("internetoftim/speecht5_tts-pld-fil-ONNX");
   });
 
-  it("pins the Filipino Whisper default to WASM with a forced language", () => {
-    // The repo ships only fp32 + q8 ONNX variants; the WebGPU path would
-    // request a nonexistent q4 decoder and fail to load.
-    expect(ASR_MODELS[0].wasmOnly).toBe(true);
+  it("forces the transcription language on the Filipino Whisper default", () => {
     expect(ASR_MODELS[0].language).toBe("tl");
+    // The repo now ships the full quant set (incl. the q4 decoder), so the
+    // fast WebGPU path is allowed — no wasmOnly pin.
+    expect(ASR_MODELS[0].wasmOnly).toBeUndefined();
   });
 
 
