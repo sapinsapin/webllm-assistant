@@ -25,7 +25,7 @@ The implementation of everything below is `src/lib/benchmark/spec.ts`
 | LoadGen validity | Minimum query counts, sanity checks, audit | `validateRun`: ≥ 3 valid runs per base category, per-sample sanity (finite, TTFT ≤ total, ≥ 4 tokens), throttling detection → `result_tier` |
 | System description | Submitter, software, system, processor, accelerator, code | Device model / GPU / RAM / cores / OS / browser + `engine`, `model_id`, `spec_version`, run `conditions` |
 | Test conditions (Mobile principle #4) | Ambient temperature, battery | `conditions`: battery charging/level, tab visibility, network type, suite duration; `thermal_decay` ratio flags throttling |
-| Versioned rounds | v0.7 … v6.0; results comparable within a version | `spec_version` (this doc = `2026.09`); leaderboards are per round |
+| Versioned rounds | v0.7 … v6.0; results comparable within a version; release notes | `spec_version` + fingerprint-pinned `ROUND_REGISTRY` (a test fails if round inputs change without a new round); [changelog](./METHODOLOGY_CHANGELOG.md); feed and leaderboard filter by round |
 | Public results explorer | Filterable table, expandable columns | Community feed shows division, tier, score, latency class; per-model leaderboards (roadmap §5) |
 
 ## 2. Scoring rules
@@ -73,7 +73,7 @@ Status is tracked here (checked items are merged on the working branch). An
 autonomous cloud routine works through unchecked items in order.
 
 - [x] **5.1 Per-device leaderboards** — aggregate certified runs by (spec_version, division, model_id, device fingerprint): median-of-N submissions with N shown as confidence. MLPerf has one number per vendor system; we show the distribution across thousands of real units. (Postgres view + `Leaderboard` component with React Query, error/empty states, tests.)
-- [ ] **5.2 Reference-model rounds** — bump `spec_version` when reference presets or prompts change; `docs/METHODOLOGY_CHANGELOG.md` like MLPerf release notes; feed filter by round.
+- [x] **5.2 Reference-model rounds** — bump `spec_version` when reference presets or prompts change; `docs/METHODOLOGY_CHANGELOG.md` like MLPerf release notes; feed filter by round.
 - [ ] **5.3 4K-context prompt** (MLPerf Client mandates 4K prompt lengths) as an extended category, with a prefill-throughput metric (prompt tokens/s).
 - [ ] **5.4 Energy proxy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery % per 1k tokens" (conditions already capture battery level).
 - [ ] **5.5 Reproducibility audit** — flag certified results whose device model has ≥ 5 runs and whose score is > 2× the device median (outlier demotion to `valid`).
@@ -87,3 +87,9 @@ autonomous cloud routine works through unchecked items in order.
 - The `Leaderboard` component (Benchmarks page) shows the current round, closed division by default, ranked by median score with ties broken by N; confidence = high (N ≥ 5), medium (2–4), single run; the ± figure is half the interquartile range as a share of the median.
 - External agents get the same aggregates via the MCP tool `get_leaderboard`.
 - Legacy, unranked (`valid`), `invalid`, and agent-`reported` rows never enter the leaderboard.
+
+## 7. Rounds (implemented in 5.2)
+
+- A round = `METHODOLOGY_VERSION` + a **fingerprint** of its defining inputs (prompt set, closed-division reference presets, quality smoke set, category tiers, thresholds), recorded in `ROUND_REGISTRY` (`src/lib/benchmark/round.ts`). `round.test.ts` recomputes the fingerprint and fails if any input changed without opening a new round, and checks every round has a [changelog](./METHODOLOGY_CHANGELOG.md) entry and is advertised by the MCP server.
+- The community feed has a round picker (all / a round / legacy = pre-round rows); the leaderboard is always per round (default: current).
+- MCP: `get_methodology` lists `rounds`; `get_community_benchmarks` accepts `spec_version` (or `legacy`).

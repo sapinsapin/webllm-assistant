@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight, ChevronDown, AlertCircle, RotateCcw } from "
 import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin, HardDrive, MemoryStick } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { isSchemaMismatch } from "@/lib/supabaseCompat";
+import { LEGACY_ROUND } from "@/lib/benchmark/round";
+import { RoundPicker } from "@/components/RoundPicker";
 
 interface BenchRun {
   id: string;
@@ -86,23 +88,25 @@ const PAGE_SIZE = 10;
 
 /** Fetch one page of community runs. Throws on error so React Query can retry
  * and surface a real error state — an error must never render as "no runs". */
-async function fetchBenchmarkPage(page: number): Promise<{ runs: BenchRun[]; totalCount: number }> {
+async function fetchBenchmarkPage(page: number, round: string): Promise<{ runs: BenchRun[]; totalCount: number }> {
   const from = page * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
   const LEGACY_COLS = "id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res";
   const METHODOLOGY_COLS = "overall_score,division,result_tier,latency_class,ttft_p90_ms,spec_version";
-  const fetchPage = (cols: string) =>
-    supabase
-      .from("benchmark_runs")
-      .select(cols, { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to);
+  const fetchPage = (cols: string, withRound: boolean) => {
+    let q = supabase.from("benchmark_runs").select(cols, { count: "exact" });
+    // Round filter: a specific round, or "legacy" = rows submitted before rounds existed.
+    if (withRound && round === LEGACY_ROUND) q = q.is("spec_version", null);
+    else if (withRound && round !== "all") q = q.eq("spec_version", round);
+    return q.order("created_at", { ascending: false }).range(from, to);
+  };
 
-  let { data, count, error } = await fetchPage(`${LEGACY_COLS},${METHODOLOGY_COLS}`);
+  let { data, count, error } = await fetchPage(`${LEGACY_COLS},${METHODOLOGY_COLS}`, true);
   // Frontend may ship before `supabase db push` — degrade to legacy columns
-  // (methodology fields render as absent) instead of an error state.
+  // (methodology fields render as absent, round filter dropped) instead of an
+  // error state.
   if (error && isSchemaMismatch(error)) {
-    ({ data, count, error } = await fetchPage(LEGACY_COLS));
+    ({ data, count, error } = await fetchPage(LEGACY_COLS, false));
   }
   if (error) throw new Error(error.message);
   return { runs: (data as unknown as BenchRun[]) ?? [], totalCount: count ?? 0 };
@@ -110,13 +114,14 @@ async function fetchBenchmarkPage(page: number): Promise<{ runs: BenchRun[]; tot
 
 export function CommunityBenchmarks() {
   const [page, setPage] = useState(0);
+  const [round, setRound] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // React Query handles retries, deduping, and out-of-order responses —
   // keepPreviousData means flipping pages never flashes stale/empty content.
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["benchmark_runs", page],
-    queryFn: () => fetchBenchmarkPage(page),
+    queryKey: ["benchmark_runs", page, round],
+    queryFn: () => fetchBenchmarkPage(page, round),
     placeholderData: keepPreviousData,
     retry: 2,
     staleTime: 30_000,
@@ -125,9 +130,16 @@ export function CommunityBenchmarks() {
   const runs = data?.runs ?? [];
   const totalCount = data?.totalCount ?? 0;
 
+  const picker = (
+    <div className="flex justify-end">
+      <RoundPicker value={round} onChange={(r) => { setRound(r); setPage(0); }} includeAll includeLegacy />
+    </div>
+  );
+
   if (isPending) {
     return (
       <div className="space-y-3">
+        {picker}
         {[...Array(4)].map((_, i) => (
           <div key={i} className="h-16 rounded-lg bg-secondary/30 animate-pulse" />
         ))}
@@ -136,7 +148,7 @@ export function CommunityBenchmarks() {
   }
 
   if (isError) {
-    return (
+    return (<div className="space-y-3">{picker}
       <div className="flex flex-col items-center gap-3 py-8 text-center">
         <AlertCircle className="h-6 w-6 text-destructive" />
         <div>
@@ -152,15 +164,18 @@ export function CommunityBenchmarks() {
         >
           <RotateCcw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} /> Try again
         </button>
-      </div>
+      </div></div>
     );
   }
 
   if (runs.length === 0) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-8">
-        No benchmark runs yet. Be the first!
-      </p>
+      <div className="space-y-3">
+        {picker}
+        <p className="text-center text-sm text-muted-foreground py-8">
+          {round === "all" ? "No benchmark runs yet. Be the first!" : "No runs in this round yet."}
+        </p>
+      </div>
     );
   }
 
@@ -168,6 +183,7 @@ export function CommunityBenchmarks() {
 
   return (
     <div className="space-y-3">
+      {picker}
       <div className="space-y-2">
         {runs.map((run) => {
           const verdictClass = VERDICT_STYLE[run.verdict] ?? "text-muted-foreground bg-secondary/30 border-border";

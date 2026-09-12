@@ -47,6 +47,8 @@ const METHODOLOGY_VERSION = "2026.09";
 
 const METHODOLOGY = {
   spec_version: METHODOLOGY_VERSION,
+  rounds: ["2026.09"], // every published round; results compare only within a round
+  changelog_url: "https://github.com/sapinsapin/webllm-assistant/blob/main/docs/METHODOLOGY_CHANGELOG.md",
   rules_url: "https://github.com/sapinsapin/webllm-assistant/blob/main/docs/BENCHMARK_METHODOLOGY.md",
   scenario: "Single-stream: prompts run sequentially, 3 runs each; percentiles across runs (MLPerf-style).",
   metrics: {
@@ -106,6 +108,8 @@ interface CommunityQueryArgs {
   model_name?: string;
   engine?: string;
   device_type?: string;
+  /** Methodology round, e.g. "2026.09"; "legacy" = rows without a round. */
+  spec_version?: string;
   limit?: number;
 }
 
@@ -203,6 +207,7 @@ mcp.tool({
       model_name: { type: "string", description: "Substring to match against model_name" },
       engine: { type: "string", description: "mediapipe | webllm | onnx" },
       device_type: { type: "string", description: "desktop | mobile | tablet" },
+      spec_version: { type: "string", description: "Methodology round (e.g. 2026.09) or 'legacy' for pre-round rows; omit for all" },
       limit: { type: "number", description: "Max rows (1-100)", default: 25 },
     },
   },
@@ -211,13 +216,15 @@ mcp.tool({
     let q = supabase
       .from("benchmark_runs")
       .select(
-        "id, created_at, model_name, engine, avg_tps, avg_ttft_ms, verdict, device_model, device_type, os, browser, gpu, ram_gb, country",
+        "id, created_at, model_name, engine, avg_tps, avg_ttft_ms, verdict, device_model, device_type, os, browser, gpu, ram_gb, country, spec_version, division, result_tier, overall_score",
       )
       .order("created_at", { ascending: false })
       .limit(limit);
     if (args?.model_name) q = q.ilike("model_name", `%${args.model_name}%`);
     if (args?.engine) q = q.eq("engine", args.engine);
     if (args?.device_type) q = q.eq("device_type", args.device_type);
+    if (args?.spec_version === "legacy") q = q.is("spec_version", null);
+    else if (args?.spec_version) q = q.eq("spec_version", args.spec_version);
     const { data, error } = await q;
     if (error) {
       return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
