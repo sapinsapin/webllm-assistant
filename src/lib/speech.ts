@@ -15,6 +15,12 @@ export interface SpeechModelPreset {
   speakerEmbeddings?: string;
   /** Forced transcription language for fine-tuned Whisper checkpoints */
   language?: string;
+  /**
+   * Force the WASM backend. Set for repos that ship only fp32 + q8 ONNX
+   * variants (e.g. optimum-cli exports): the WebGPU path requests a q4
+   * decoder that doesn't exist there and the load fails.
+   */
+  wasmOnly?: boolean;
 }
 
 
@@ -38,6 +44,8 @@ export const ASR_MODELS: SpeechModelPreset[] = [
     description:
       "sapinsapin's Filipino Whisper fine-tune, converted to ONNX for in-browser inference.",
     language: "tl",
+    // The repo ships only fp32 + q8 variants — no q4 decoder for WebGPU.
+    wasmOnly: true,
   },
 
   {
@@ -295,7 +303,7 @@ export async function runAsrBenchmark(
   onProgress: ProgressFn
 ): Promise<AsrBenchmarkResult> {
   env.allowLocalModels = false;
-  const device = await pickSpeechDevice();
+  const device = model.wasmOnly ? "wasm" : await pickSpeechDevice();
 
   onProgress(2, `Loading ${model.name} (${device})…`);
   const loadStart = performance.now();

@@ -31,4 +31,12 @@ export default tseslint.config(
       "@typescript-eslint/no-empty-object-type": "off",
     },
   },
+  {
+    // Lovable-generated Supabase integration files ("Do not edit it directly")
+    // — don't fail lint on their generated code style.
+    files: ["src/integrations/supabase/client.ts", "src/integrations/supabase/previewAuthStorage.ts"],
+    rules: {
+      "prefer-const": "off",
+    },
+  },
 );
