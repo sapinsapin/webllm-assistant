@@ -11,6 +11,7 @@ import { BenchmarkSuite } from "@/components/BenchmarkSuite";
 import { Badge } from "@/components/ui/badge";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
+import { Leaderboard } from "@/components/Leaderboard";
 import { FrugalFlops } from "@/components/FrugalFlops";
 import { SpeechBench } from "@/components/SpeechBench";
 
@@ -291,6 +292,9 @@ export default function Benchmarks() {
 
           {/* Runnable Test Suite */}
           <BenchmarkSuite onComplete={() => fetchRuns()} />
+
+          {/* Per-device leaderboard (methodology 2026.09, certified runs) */}
+          <Leaderboard />
 
           {/* Speech (ASR / TTS) benchmarks */}
           <SpeechBench />

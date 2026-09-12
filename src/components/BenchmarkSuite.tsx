@@ -6,10 +6,44 @@ import { getDeviceInfo, type DeviceInfo } from "@/lib/deviceInfo";
 import { getBestQuickStartModel, BENCHMARK_PROMPTS, BENCHMARK_CATEGORIES, PRESET_MODELS, type BenchmarkCategory } from "@/lib/models";
 import { useLlmInference } from "@/hooks/useLlmInference";
 import type { BenchmarkResult } from "@/hooks/useLlmInference";
+import {
+  METHODOLOGY_VERSION,
+  QUALITY_SMOKE_PROMPT_IDS,
+  aggregateRun,
+  divisionFor,
+  getVerdict,
+  qualityScoreFrom,
+  resultTierFor,
+  type ResultTier,
+  type RunStats,
+} from "@/lib/benchmark/spec";
+import { captureRunConditions, type RunConditions } from "@/lib/benchmark/conditions";
+import { EVAL_PROMPTS, computeScore, scoreResponse } from "@/lib/evals";
+import { isSchemaMismatch, stripMethodologyColumns } from "@/lib/supabaseCompat";
 
 type Phase = "idle" | "downloading" | "benchmarking" | "done";
 
 const RUNS_PER_PROMPT = 3;
+
+// Quality smoke test (MLPerf-style accuracy gate): objective eval prompts run
+// once each after the performance prompts; their keyword score gates the
+// "certified" tier so a fast-but-broken model can't top the leaderboard.
+const QUALITY_PROMPTS = QUALITY_SMOKE_PROMPT_IDS
+  .map((id) => EVAL_PROMPTS.find((e) => e.id === id))
+  .filter((p): p is NonNullable<typeof p> => p != null);
+
+const VERDICT_COLORS: Record<string, string> = {
+  "Yes, you can AI!": "text-primary",
+  "Mostly, yes": "text-yellow-400",
+  "Barely…": "text-orange-400",
+  "No, not yet": "text-destructive",
+};
+
+const TIER_BADGE: Record<ResultTier, { label: string; cls: string }> = {
+  certified: { label: "✓ Certified", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" },
+  valid: { label: "Valid · unranked", cls: "text-amber-400 border-amber-400/30 bg-amber-400/10" },
+  invalid: { label: "Invalid run", cls: "text-red-400 border-red-400/30 bg-red-400/10" },
+};
 
 const CATEGORY_COLORS: Record<string, string> = {
   ttft: "bg-primary/80",
@@ -54,22 +88,12 @@ function buildAggregated(prompt: string, category: string, label: string, runs: 
   };
 }
 
-const VERDICTS = [
-  { min: 15, label: "Yes, you can AI!", emoji: "🚀", color: "text-primary", description: "Your device handles AI smoothly." },
-  { min: 6, label: "Mostly, yes", emoji: "👍", color: "text-yellow-400", description: "Good enough for short tasks. Longer generation will feel sluggish." },
-  { min: 1, label: "Barely…", emoji: "🐢", color: "text-orange-400", description: "It works, but expect noticeable latency." },
-  { min: 0, label: "No, not yet", emoji: "⛔", color: "text-destructive", description: "Too slow for practical on-device AI right now." },
-];
-
-function getVerdict(avgTps: number) {
-  return VERDICTS.find((v) => avgTps >= v.min) || VERDICTS[VERDICTS.length - 1];
-}
-
 interface BenchmarkSuiteProps {
   onComplete?: () => void;
 }
 
-const totalSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
+const perfSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
+const totalSteps = perfSteps + QUALITY_PROMPTS.length;
 
 export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const {
@@ -102,7 +126,14 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const [submitted, setSubmitted] = useState(false);
   const [insertedId, setInsertedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [stats, setStats] = useState<RunStats | null>(null);
+  const [qualityScore, setQualityScore] = useState<number | null>(null);
+  const [resultTier, setResultTier] = useState<ResultTier | null>(null);
+  const [qualityIdx, setQualityIdx] = useState(-1);
   const autoSubmittedRef = useRef(false);
+  // Run conditions: MLPerf Mobile's "test conditions" principle — record
+  // whether the tab was backgrounded (browsers throttle hidden tabs).
+  const hiddenDuringRunRef = useRef(false);
 
   const noEngine = capabilities.length > 0 && !capabilities.some((c) => c.available);
 
@@ -115,6 +146,13 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   useEffect(() => {
     if (phase !== "benchmarking") return;
     let cancelled = false;
+
+    const suiteStart = performance.now();
+    hiddenDuringRunRef.current = document.visibilityState === "hidden";
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") hiddenDuringRunRef.current = true;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     (async () => {
       try {
@@ -151,6 +189,26 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
         if (cancelled) return;
 
+        // Quality smoke test — one generation per eval prompt, keyword-scored.
+        setCurrentPromptIdx(-1);
+        setCurrentRun(0);
+        const qualityScores: number[] = [];
+        for (let qi = 0; qi < QUALITY_PROMPTS.length; qi++) {
+          if (cancelled) break;
+          setQualityIdx(qi);
+          setProgress((step / totalSteps) * 100);
+          try {
+            const ep = QUALITY_PROMPTS[qi];
+            const r = await runBenchmarkPrompt(ep.prompt, "quality");
+            if (r) qualityScores.push(computeScore(scoreResponse(ep, r.response)));
+          } catch (qErr) {
+            console.warn(`Quality prompt ${qi} failed:`, qErr);
+          }
+          step++;
+        }
+        setQualityIdx(-1);
+        if (cancelled) return;
+
         const agg: AggregatedResult[] = [];
         let succeededRuns = 0;
         for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
@@ -176,16 +234,24 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           return;
         }
 
-        const failedRuns = totalSteps - succeededRuns;
+        const failedRuns = perfSteps - succeededRuns;
         if (failedRuns > 0) {
           toast({
-            title: `${failedRuns} of ${totalSteps} runs failed`,
+            title: `${failedRuns} of ${perfSteps} runs failed`,
             description: lastErrRef.current
               ? `Last error: ${lastErrRef.current}. The verdict is based on the ${succeededRuns} runs that completed.`
               : `The verdict is based on the ${succeededRuns} runs that completed.`,
             variant: "destructive",
           });
         }
+
+        // Methodology 2026.09: percentiles, geomean score, validity, tier.
+        const runStats = aggregateRun(agg.flatMap((a) => a.runs));
+        const quality = qualityScoreFrom(qualityScores);
+        const tier = resultTierFor(runStats, quality);
+        setStats(runStats);
+        setQualityScore(quality);
+        setResultTier(tier);
 
         setAggregated(agg);
         setProgress(100);
@@ -195,9 +261,22 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
         const avgTps = agg.length > 0 ? mean(agg.map(a => a.meanTps)) : 0;
         const avgTtft = agg.length > 0 ? mean(agg.map(a => a.meanTtft)) : 0;
-        const v = getVerdict(avgTps);
+        const v = getVerdict(runStats.overall_score);
 
-        toast({ title: `${v.emoji} ${v.label} — ${avgTps.toFixed(1)} tok/s`, description: v.description });
+        toast({ title: `${v.emoji} ${v.label} — ${runStats.overall_score.toFixed(1)} tok/s`, description: v.description });
+        if (tier !== "certified") {
+          toast({
+            title: tier === "invalid" ? "Result not certifiable" : "Result valid but unranked",
+            description:
+              runStats.validity.reasons[0] ??
+              (quality == null ? "Quality check didn't complete." : `Quality ${(quality * 100).toFixed(0)}% is below the ${(50).toFixed(0)}% gate.`),
+          });
+        }
+
+        const conditions = await captureRunConditions({
+          pageHiddenDuringRun: hiddenDuringRunRef.current,
+          suiteDurationMs: performance.now() - suiteStart,
+        });
 
         // Detect device, then auto-submit immediately so no result is lost.
         // Users can refine device/GPU/RAM afterwards via the "Edit details" button.
@@ -210,7 +289,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           setOverrideRam(device.ram != null ? String(device.ram) : "");
           if (!autoSubmittedRef.current) {
             autoSubmittedRef.current = true;
-            void autoSubmit(device, agg, avgTps, avgTtft, v.label);
+            void autoSubmit(device, agg, avgTps, avgTtft, v.label, runStats, quality, tier, conditions);
           }
         } catch (detectErr) {
           console.error("Device detection failed:", detectErr);
@@ -225,7 +304,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark, engine, onComplete]);
 
@@ -252,6 +334,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     setSubmitted(false);
     setInsertedId(null);
     setEditing(false);
+    setStats(null);
+    setQualityScore(null);
+    setResultTier(null);
+    setQualityIdx(-1);
     autoSubmittedRef.current = false;
   };
 
@@ -262,18 +348,33 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     avgTpsVal: number,
     avgTtftVal: number,
     verdictLabel: string,
+    runStats: RunStats,
+    quality: number | null,
+    tier: ResultTier,
+    conditions: RunConditions,
   ) => {
     setSubmitting(true);
     const allResults = agg.flatMap(a => a.runs);
     try {
-      const { data, error } = await supabase
-        .from("benchmark_runs")
-        .insert({
+      const row = {
           model_name: allResults[0]?.modelName || "Unknown",
           engine,
           avg_tps: avgTpsVal,
           avg_ttft_ms: avgTtftVal,
           verdict: verdictLabel,
+          // Methodology 2026.09 fields (see docs/BENCHMARK_METHODOLOGY.md)
+          spec_version: METHODOLOGY_VERSION,
+          division: divisionFor(engine, model?.id),
+          model_id: model?.id ?? null,
+          overall_score: runStats.overall_score,
+          ttft_p90_ms: Number.isFinite(runStats.ttft_p90_ms) ? runStats.ttft_p90_ms : null,
+          tpot_p50_ms: Number.isFinite(runStats.tpot_p50_ms) ? runStats.tpot_p50_ms : null,
+          latency_class: runStats.latency_class,
+          quality_score: quality,
+          result_tier: tier,
+          validity: runStats.validity,
+          stats: { categories: runStats.categories, thermal_decay: runStats.thermal_decay },
+          conditions: { ...conditions },
           results: allResults.map((r) => ({
             prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
             timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
@@ -289,9 +390,16 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           device_type: device.deviceType,
           country: device.country, city: device.city,
           latitude: device.latitude, longitude: device.longitude,
-        })
-        .select("id")
-        .single();
+      };
+      let { data, error } = await supabase.from("benchmark_runs").insert(row).select("id").single();
+      if (error && isSchemaMismatch(error)) {
+        // Frontend shipped before `supabase db push`: keep the result (legacy
+        // columns) rather than losing it, and say so.
+        ({ data, error } = await supabase.from("benchmark_runs").insert(stripMethodologyColumns(row)).select("id").single());
+        if (!error) {
+          toast({ title: "Saved without methodology fields", description: "The database migration for round " + METHODOLOGY_VERSION + " isn't applied yet; score details were kept locally only." });
+        }
+      }
       if (error) {
         console.error("Failed to save benchmark:", error);
         toast({ title: "Couldn't save result", description: error.message, variant: "destructive" });
@@ -339,9 +447,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   };
 
   const isActive = phase === "downloading" || phase === "benchmarking";
-  const avgTps = aggregated.length > 0 ? mean(aggregated.map(a => a.meanTps)) : 0;
-  const avgTtft = aggregated.length > 0 ? mean(aggregated.map(a => a.meanTtft)) : 0;
-  const verdict = getVerdict(avgTps);
+  const score = stats?.overall_score ?? 0;
+  const ttftP90 = stats && Number.isFinite(stats.ttft_p90_ms) ? stats.ttft_p90_ms : 0;
+  const verdict = getVerdict(score);
+  const verdictColor = VERDICT_COLORS[verdict.label] ?? "text-foreground";
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -351,7 +460,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
         <div className="flex-1">
           <h2 className="text-sm font-bold font-mono text-foreground">Can I AI? — Full Test Suite</h2>
           <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-            Runs {BENCHMARK_PROMPTS.length} prompts × {RUNS_PER_PROMPT} runs each ({totalSteps} total) to account for variance.
+            {BENCHMARK_PROMPTS.length} prompts × {RUNS_PER_PROMPT} runs + {QUALITY_PROMPTS.length}-prompt quality check · methodology {METHODOLOGY_VERSION} (MLPerf-style percentiles &amp; accuracy gate)
           </p>
         </div>
         {phase === "idle" && (
@@ -378,21 +487,43 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
         <div className="border-b border-border p-6 flex flex-col items-center gap-4">
           <div className="text-center space-y-2">
             <p className="text-5xl">{verdict.emoji}</p>
-            <h3 className={`text-2xl font-bold font-mono ${verdict.color}`}>{verdict.label}</h3>
+            <h3 className={`text-2xl font-bold font-mono ${verdictColor}`}>{verdict.label}</h3>
             <p className="text-sm text-muted-foreground max-w-sm">{verdict.description}</p>
           </div>
+          {stats && resultTier && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-mono">
+              <span className={`rounded-md border px-2 py-0.5 ${TIER_BADGE[resultTier].cls}`}>{TIER_BADGE[resultTier].label}</span>
+              <span className="rounded-md border border-border bg-secondary/40 px-2 py-0.5 text-muted-foreground capitalize">
+                {divisionFor(engine, model?.id)} division
+              </span>
+              <span className="rounded-md border border-border bg-secondary/40 px-2 py-0.5 text-muted-foreground capitalize">
+                {stats.latency_class}
+              </span>
+              {qualityScore != null && (
+                <span className="rounded-md border border-border bg-secondary/40 px-2 py-0.5 text-muted-foreground">
+                  quality {(qualityScore * 100).toFixed(0)}%
+                </span>
+              )}
+              {stats.thermal_decay < 0.7 && (
+                <span className="rounded-md border border-orange-400/30 bg-orange-400/10 px-2 py-0.5 text-orange-400">throttled</span>
+              )}
+            </div>
+          )}
+          {stats && !stats.validity.valid && stats.validity.reasons.length > 0 && (
+            <p className="text-[10px] font-mono text-muted-foreground text-center max-w-sm">{stats.validity.reasons[0]}</p>
+          )}
           <div className="grid grid-cols-3 gap-3 w-full max-w-xs">
             <div className="rounded-lg border border-border bg-secondary/30 p-2.5 text-center">
               <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground mb-0.5">
-                <Zap className="h-3 w-3" /> tok/s
+                <Zap className="h-3 w-3" /> score tok/s
               </div>
-              <p className="text-base font-bold font-mono text-foreground">{avgTps.toFixed(1)}</p>
+              <p className="text-base font-bold font-mono text-foreground">{score.toFixed(1)}</p>
             </div>
             <div className="rounded-lg border border-border bg-secondary/30 p-2.5 text-center">
               <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground mb-0.5">
-                <Timer className="h-3 w-3" /> TTFT
+                <Timer className="h-3 w-3" /> TTFT p90
               </div>
-              <p className="text-base font-bold font-mono text-foreground">{avgTtft.toFixed(0)}ms</p>
+              <p className="text-base font-bold font-mono text-foreground">{ttftP90.toFixed(0)}ms</p>
             </div>
             <div className="rounded-lg border border-border bg-secondary/30 p-2.5 text-center">
               <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground mb-0.5">
@@ -521,7 +652,9 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
               <Loader2 className="h-3 w-3 animate-spin text-primary" />
               {phase === "downloading"
                 ? `Downloading ${model?.name} (${model?.size})…`
-                : `Prompt ${currentPromptIdx + 1}/${BENCHMARK_PROMPTS.length} · run ${currentRun}/${RUNS_PER_PROMPT}`}
+                : qualityIdx >= 0
+                  ? `Quality check ${qualityIdx + 1}/${QUALITY_PROMPTS.length}`
+                  : `Prompt ${currentPromptIdx + 1}/${BENCHMARK_PROMPTS.length} · run ${currentRun}/${RUNS_PER_PROMPT}`}
             </span>
             <span className="text-foreground font-semibold">{Math.round(phase === "downloading" ? downloadProgress : progress)}%</span>
           </div>

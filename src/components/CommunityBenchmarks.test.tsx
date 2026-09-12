@@ -70,6 +70,17 @@ describe("CommunityBenchmarks states", () => {
     expect(screen.queryByText(/No benchmark runs yet/)).not.toBeInTheDocument();
   }, 15_000);
 
+  it("falls back to legacy columns when the live schema predates the methodology migration", async () => {
+    h.rangeMock
+      .mockResolvedValueOnce({ data: null, count: null, error: { code: "PGRST204", message: "Could not find the 'overall_score' column of 'benchmark_runs' in the schema cache" } })
+      .mockResolvedValueOnce({ data: [run()], count: 1, error: null });
+    renderWithQuery(<CommunityBenchmarks />);
+
+    expect(await screen.findByText("MacBook Pro M4")).toBeInTheDocument();
+    expect(h.rangeMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Couldn't load community results")).not.toBeInTheDocument();
+  });
+
   it("shows the empty state only for a successful empty result", async () => {
     h.rangeMock.mockResolvedValue({ data: [], count: 0, error: null });
     renderWithQuery(<CommunityBenchmarks />);

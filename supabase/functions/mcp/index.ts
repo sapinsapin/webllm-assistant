@@ -41,15 +41,38 @@ const BENCHMARK_PROMPTS = [
   { label: "4× parallel", prompt: "Define gravity in one sentence.", category: "concurrent", concurrency: 4 },
 ];
 
+// Mirror of src/lib/benchmark/spec.ts (the Deno function can't import src/).
+// spec.test.ts parity-checks the version string and verdict thresholds here.
+const METHODOLOGY_VERSION = "2026.09";
+
 const METHODOLOGY = {
+  spec_version: METHODOLOGY_VERSION,
+  rules_url: "https://github.com/sapinsapin/webllm-assistant/blob/main/docs/BENCHMARK_METHODOLOGY.md",
+  scenario: "Single-stream: prompts run sequentially, 3 runs each; percentiles across runs (MLPerf-style).",
   metrics: {
-    tokens_per_second: "Decoded tokens / wall-clock generation time (s), per prompt, averaged across runs.",
-    ttft_ms: "Time to first token in ms — measures prefill latency.",
-    tpot_ms: "Time per output token in ms — average inter-token latency during decode.",
-    verdict: "Excellent>=20, Good>=10, Usable>=4, Slow>=1, Unusable<1 (avg_tps over the suite).",
+    tokens_per_second: "Decoded tokens / wall-clock generation time (s), per run.",
+    ttft_ms: "Time to first token in ms — prefill latency. Reported as p90 (tail) over base runs.",
+    tpot_ms: "Time per output token in ms — inter-token decode latency. Reported as p50.",
+    overall_score: "Geometric mean of the per-category MEDIAN tok/s across the five base categories.",
+    latency_class: "interactive (TTFT p90 <= 500ms & TPOT p50 <= 30ms) | conversational (<= 2000ms & <= 100ms) | batch.",
+    verdict: "On overall_score: 'Yes, you can AI!' >= 15, 'Mostly, yes' >= 6, 'Barely…' >= 1, else 'No, not yet'.",
   },
+  tiers: {
+    base: ["ttft", "short", "medium", "long", "reasoning"],
+    extended: ["long_context", "multi_turn", "concurrent"],
+    note: "Only base categories contribute to overall_score; extended categories are reported.",
+  },
+  divisions: {
+    closed: "Reference preset per engine (gemma-1b / webllm-llama-1b / onnx-smollm2-135m) — apples-to-apples.",
+    open: "Any model. All MCP submissions are recorded as open division, result_tier 'reported'.",
+  },
+  validity: {
+    min_runs_per_base_category: 3,
+    quality_gate: "Mean keyword-eval score >= 0.5 on the 6-prompt smoke set is required for result_tier 'certified'.",
+    result_tiers: ["certified", "valid", "invalid", "reported"],
+  },
+  leaderboard: "get_leaderboard: median-of-N certified runs per (device, model, engine) within a round; runs = N is the confidence.",
   runs_per_prompt: 3,
-  warmup: "First run per prompt discarded when averaging.",
   categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "multi_turn", "concurrent"],
 };
 
@@ -64,11 +87,10 @@ const PRESET_MODELS = [
 ];
 
 function verdictFor(tps: number): string {
-  if (tps >= 20) return "Excellent";
-  if (tps >= 10) return "Good";
-  if (tps >= 4) return "Usable";
-  if (tps >= 1) return "Slow";
-  return "Unusable";
+  if (tps >= 15) return "Yes, you can AI!";
+  if (tps >= 6) return "Mostly, yes";
+  if (tps >= 1) return "Barely…";
+  return "No, not yet";
 }
 
 // ----- Input validation for the public write surface -----
@@ -205,9 +227,44 @@ mcp.tool({
 });
 
 mcp.tool({
+  name: "get_leaderboard",
+  description:
+    "Per-device leaderboard for the current methodology round: median overall_score of CERTIFIED runs grouped by device, model and engine (view benchmark_leaderboard). Defaults to the closed division (reference model per engine).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      division: { type: "string", description: "closed | open (default closed)" },
+      engine: { type: "string", description: "mediapipe | webllm | onnx" },
+      model_id: { type: "string", description: "Preset id, e.g. webllm-llama-1b" },
+      limit: { type: "number", description: "Max rows (1-100)", default: 25 },
+    },
+  },
+  handler: async (args: { division?: string; engine?: string; model_id?: string; limit?: number }) => {
+    const limit = Math.min(Math.max(args?.limit ?? 25, 1), 100);
+    const division = args?.division === "open" ? "open" : "closed";
+    let q = supabase
+      .from("benchmark_leaderboard")
+      .select("device_key, device_type, model_id, model_name, engine, runs, score_p50, score_p25, score_p75, ttft_p90_p50_ms, last_run_at")
+      .eq("spec_version", METHODOLOGY_VERSION)
+      .eq("division", division)
+      .order("score_p50", { ascending: false })
+      .limit(limit);
+    if (args?.engine) q = q.eq("engine", args.engine);
+    if (args?.model_id) q = q.eq("model_id", args.model_id);
+    const { data, error } = await q;
+    if (error) {
+      return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify({ spec_version: METHODOLOGY_VERSION, division, count: data?.length ?? 0, rows: data }, null, 2) }],
+    };
+  },
+});
+
+mcp.tool({
   name: "submit_benchmark_run",
   description:
-    "Submit a completed benchmark run to the community feed. Provide at minimum model_name, engine, and avg_tps; verdict is computed if omitted. Include device hardware fields when known so the result is comparable.",
+    "Submit a completed benchmark run to the community feed. Provide at minimum model_name, engine, and avg_tps; verdict is computed if omitted. Include device hardware fields when known so the result is comparable. Agent submissions are recorded as open-division 'reported' results (only runs of the in-app suite can be certified/ranked).",
   inputSchema: {
     type: "object",
     properties: {
@@ -255,6 +312,12 @@ mcp.tool({
       country: optionalString(args.country, 100),
       user_agent: "mcp:can-i-ai/1.0",
       results: (args.results as unknown[] | undefined) ?? [],
+      // Agent-submitted runs did not go through the in-app suite, so they
+      // cannot be certified or ranked in the closed division — they are
+      // recorded transparently as open-division "reported" results.
+      spec_version: METHODOLOGY_VERSION,
+      division: "open",
+      result_tier: "reported",
     };
     const { data, error } = await supabase
       .from("benchmark_runs")

@@ -39,6 +39,19 @@ export type Database = {
           screen_res: string | null
           user_agent: string | null
           verdict: string
+          spec_version: string | null
+          division: string | null
+          model_id: string | null
+          overall_score: number | null
+          ttft_p90_ms: number | null
+          tpot_p50_ms: number | null
+          latency_class: string | null
+          quality_score: number | null
+          result_tier: string | null
+          validity: Json | null
+          stats: Json | null
+          conditions: Json | null
+          engine_version: string | null
         }
         Insert: {
           avg_tps: number
@@ -64,6 +77,19 @@ export type Database = {
           screen_res?: string | null
           user_agent?: string | null
           verdict: string
+          spec_version?: string | null
+          division?: string | null
+          model_id?: string | null
+          overall_score?: number | null
+          ttft_p90_ms?: number | null
+          tpot_p50_ms?: number | null
+          latency_class?: string | null
+          quality_score?: number | null
+          result_tier?: string | null
+          validity?: Json | null
+          stats?: Json | null
+          conditions?: Json | null
+          engine_version?: string | null
         }
         Update: {
           avg_tps?: number
@@ -89,6 +115,19 @@ export type Database = {
           screen_res?: string | null
           user_agent?: string | null
           verdict?: string
+          spec_version?: string | null
+          division?: string | null
+          model_id?: string | null
+          overall_score?: number | null
+          ttft_p90_ms?: number | null
+          tpot_p50_ms?: number | null
+          latency_class?: string | null
+          quality_score?: number | null
+          result_tier?: string | null
+          validity?: Json | null
+          stats?: Json | null
+          conditions?: Json | null
+          engine_version?: string | null
         }
         Relationships: []
       }
@@ -118,7 +157,25 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      benchmark_leaderboard: {
+        Row: {
+          spec_version: string | null
+          division: string | null
+          model_id: string | null
+          engine: string | null
+          device_key: string | null
+          device_type: string | null
+          model_name: string | null
+          gpu: string | null
+          runs: number | null
+          score_p50: number | null
+          score_p25: number | null
+          score_p75: number | null
+          ttft_p90_p50_ms: number | null
+          last_run_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
