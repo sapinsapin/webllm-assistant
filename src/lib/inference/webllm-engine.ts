@@ -2,6 +2,8 @@ import * as webllm from "@mlc-ai/web-llm";
 import type { InferenceEngine, InferenceCallbacks, GenerationResult } from "./types";
 
 export class WebLLMEngine implements InferenceEngine {
+  /** MLC default context_window_size for the bundled presets. */
+  readonly maxContextTokens = 4096;
   readonly type = "webllm" as const;
   readonly label = "WebLLM (WebGPU)";
   private engine: webllm.MLCEngineInterface | null = null;

@@ -5,6 +5,9 @@ import { ChevronLeft, ChevronRight, ChevronDown, AlertCircle, RotateCcw } from "
 import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin, HardDrive, MemoryStick } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { isSchemaMismatch } from "@/lib/supabaseCompat";
+import { LEGACY_ROUND } from "@/lib/benchmark/round";
+import type { AuditFlag } from "@/lib/benchmark/audit";
+import { RoundPicker } from "@/components/RoundPicker";
 
 interface BenchRun {
   id: string;
@@ -86,37 +89,63 @@ const PAGE_SIZE = 10;
 
 /** Fetch one page of community runs. Throws on error so React Query can retry
  * and surface a real error state — an error must never render as "no runs". */
-async function fetchBenchmarkPage(page: number): Promise<{ runs: BenchRun[]; totalCount: number }> {
+async function fetchBenchmarkPage(page: number, round: string): Promise<{ runs: BenchRun[]; totalCount: number; flags: Record<string, Pick<AuditFlag, "device_median" | "device_runs">> }> {
   const from = page * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
   const LEGACY_COLS = "id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res";
   const METHODOLOGY_COLS = "overall_score,division,result_tier,latency_class,ttft_p90_ms,spec_version";
-  const fetchPage = (cols: string) =>
-    supabase
-      .from("benchmark_runs")
-      .select(cols, { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to);
+  const fetchPage = (cols: string, withRound: boolean) => {
+    let q = supabase.from("benchmark_runs").select(cols, { count: "exact" });
+    // Round filter: a specific round, or "legacy" = rows submitted before rounds existed.
+    if (withRound && round === LEGACY_ROUND) q = q.is("spec_version", null);
+    else if (withRound && round !== "all") q = q.eq("spec_version", round);
+    return q.order("created_at", { ascending: false }).range(from, to);
+  };
 
-  let { data, count, error } = await fetchPage(`${LEGACY_COLS},${METHODOLOGY_COLS}`);
+  let { data, count, error } = await fetchPage(`${LEGACY_COLS},${METHODOLOGY_COLS}`, true);
   // Frontend may ship before `supabase db push` — degrade to legacy columns
-  // (methodology fields render as absent) instead of an error state.
+  // (methodology fields render as absent, round filter dropped) instead of an
+  // error state.
   if (error && isSchemaMismatch(error)) {
-    ({ data, count, error } = await fetchPage(LEGACY_COLS));
+    ({ data, count, error } = await fetchPage(LEGACY_COLS, false));
   }
   if (error) throw new Error(error.message);
-  return { runs: (data as unknown as BenchRun[]) ?? [], totalCount: count ?? 0 };
+  const runs = (data as unknown as BenchRun[]) ?? [];
+  return { runs, totalCount: count ?? 0, flags: await fetchAuditFlags(runs) };
+}
+
+/** Reproducibility-audit flags for the certified rows on this page. Best
+ * effort: a missing view (pre-migration) or a failure just means no badges —
+ * it must never turn a loaded feed into an error state. */
+async function fetchAuditFlags(runs: BenchRun[]): Promise<Record<string, Pick<AuditFlag, "device_median" | "device_runs">>> {
+  const ids = runs.filter((r) => r.result_tier === "certified").map((r) => r.id);
+  if (ids.length === 0) return {};
+  try {
+    const { data, error } = await supabase
+      .from("benchmark_audit")
+      .select("id,flagged,device_median,device_runs")
+      .in("id", ids);
+    if (error || !data) return {};
+    const out: Record<string, Pick<AuditFlag, "device_median" | "device_runs">> = {};
+    for (const a of data as { id: string | null; flagged: boolean | null; device_median: number | null; device_runs: number | null }[]) {
+      if (a.id && a.flagged) out[a.id] = { device_median: a.device_median ?? 0, device_runs: a.device_runs ?? 0 };
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 export function CommunityBenchmarks() {
   const [page, setPage] = useState(0);
+  const [round, setRound] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // React Query handles retries, deduping, and out-of-order responses —
   // keepPreviousData means flipping pages never flashes stale/empty content.
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["benchmark_runs", page],
-    queryFn: () => fetchBenchmarkPage(page),
+    queryKey: ["benchmark_runs", page, round],
+    queryFn: () => fetchBenchmarkPage(page, round),
     placeholderData: keepPreviousData,
     retry: 2,
     staleTime: 30_000,
@@ -124,10 +153,18 @@ export function CommunityBenchmarks() {
 
   const runs = data?.runs ?? [];
   const totalCount = data?.totalCount ?? 0;
+  const flags = data?.flags ?? {};
+
+  const picker = (
+    <div className="flex justify-end">
+      <RoundPicker value={round} onChange={(r) => { setRound(r); setPage(0); }} includeAll includeLegacy />
+    </div>
+  );
 
   if (isPending) {
     return (
       <div className="space-y-3">
+        {picker}
         {[...Array(4)].map((_, i) => (
           <div key={i} className="h-16 rounded-lg bg-secondary/30 animate-pulse" />
         ))}
@@ -136,7 +173,7 @@ export function CommunityBenchmarks() {
   }
 
   if (isError) {
-    return (
+    return (<div className="space-y-3">{picker}
       <div className="flex flex-col items-center gap-3 py-8 text-center">
         <AlertCircle className="h-6 w-6 text-destructive" />
         <div>
@@ -152,15 +189,18 @@ export function CommunityBenchmarks() {
         >
           <RotateCcw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} /> Try again
         </button>
-      </div>
+      </div></div>
     );
   }
 
   if (runs.length === 0) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-8">
-        No benchmark runs yet. Be the first!
-      </p>
+      <div className="space-y-3">
+        {picker}
+        <p className="text-center text-sm text-muted-foreground py-8">
+          {round === "all" ? "No benchmark runs yet. Be the first!" : "No runs in this round yet."}
+        </p>
+      </div>
     );
   }
 
@@ -168,6 +208,7 @@ export function CommunityBenchmarks() {
 
   return (
     <div className="space-y-3">
+      {picker}
       <div className="space-y-2">
         {runs.map((run) => {
           const verdictClass = VERDICT_STYLE[run.verdict] ?? "text-muted-foreground bg-secondary/30 border-border";
@@ -210,7 +251,14 @@ export function CommunityBenchmarks() {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  {run.result_tier && TIER_BADGE[run.result_tier] && (
+                  {flags[run.id] ? (
+                    <span
+                      className="hidden sm:inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-mono text-orange-400 border-orange-400/30 bg-orange-400/10"
+                      title={`Audit: > 2× this device's median (${flags[run.id].device_median.toFixed(1)} tok/s over ${flags[run.id].device_runs} runs) — treated as unranked`}
+                    >
+                      ⚠ outlier
+                    </span>
+                  ) : run.result_tier && TIER_BADGE[run.result_tier] && (
                     <span className={`hidden sm:inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-mono ${TIER_BADGE[run.result_tier].cls}`}>
                       {TIER_BADGE[run.result_tier].label}
                     </span>

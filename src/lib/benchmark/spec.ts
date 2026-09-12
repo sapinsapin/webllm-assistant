@@ -50,8 +50,11 @@ export const CATEGORY_TIER: Record<BenchmarkCategory, PromptTier> = {
   long: "base",
   reasoning: "base",
   long_context: "extended",
+  long_context_4k: "extended",
   multi_turn: "extended",
   concurrent: "extended",
+  structured: "extended",
+  code: "extended",
 };
 
 export const BASE_CATEGORIES = (Object.keys(CATEGORY_TIER) as BenchmarkCategory[]).filter(
@@ -155,6 +158,26 @@ export interface RunSample {
   tokensPerSecond: number;
   ttftMs: number;
   tpotMs: number;
+  /** Length of the full prompt sent to the engine (chars); enables the
+   * prefill-throughput estimate. Optional for legacy rows. */
+  promptChars?: number;
+  /** Result of the prompt's output check: true/false, or null/undefined when
+   * the prompt has no check. A false sample never counts toward throughput. */
+  passedCheck?: boolean | null;
+}
+
+/** Engines don't expose tokenizers uniformly, so prompt tokens are estimated
+ * at ~4 chars/token (the usual English heuristic). Reported as an estimate. */
+export const CHARS_PER_TOKEN_ESTIMATE = 4;
+export function estimatePromptTokens(chars: number): number {
+  return Math.max(0, Math.round(chars / CHARS_PER_TOKEN_ESTIMATE));
+}
+
+/** Estimated prefill throughput (prompt tokens / TTFT seconds); null when the
+ * sample carries no prompt length or TTFT is zero. */
+export function prefillTps(s: Pick<RunSample, "promptChars" | "ttftMs">): number | null {
+  if (s.promptChars == null || !(s.ttftMs > 0)) return null;
+  return estimatePromptTokens(s.promptChars) / (s.ttftMs / 1000);
 }
 
 export interface CategoryStats {
@@ -166,6 +189,10 @@ export interface CategoryStats {
   ttft_p90_ms: number;
   tpot_p50_ms: number;
   tokens_mean: number;
+  /** Median estimated prefill throughput (prompt tok/s); null if unknown. */
+  prefill_tps_p50: number | null;
+  /** Share of checked runs whose output passed (0..1); null when unchecked. */
+  check_pass_rate: number | null;
 }
 
 export interface Validity {
@@ -207,7 +234,20 @@ export function sampleProblem(s: RunSample): string | null {
 export function aggregateRun(samples: RunSample[]): RunStats {
   const reasons: string[] = [];
   const clean: RunSample[] = [];
+  // Output-checked prompts: a failed check is an accuracy failure, not a
+  // performance sample (MLPerf accuracy target). Tracked for the pass rate.
+  const checked = new Map<string, { passed: number; total: number }>();
   for (const s of samples) {
+    if (s.passedCheck != null) {
+      const c = checked.get(s.category) ?? { passed: 0, total: 0 };
+      c.total++;
+      if (s.passedCheck) c.passed++;
+      checked.set(s.category, c);
+      if (!s.passedCheck) {
+        reasons.push(`output check failed in ${s.category}`);
+        continue;
+      }
+    }
     const problem = sampleProblem(s);
     if (problem) reasons.push(problem);
     else clean.push(s);
@@ -219,6 +259,12 @@ export function aggregateRun(samples: RunSample[]): RunStats {
     byCategory.get(s.category)!.push(s);
   }
 
+  // A checked category where every run failed still appears, with a 0 pass
+  // rate, so the failure is visible rather than silently absent.
+  for (const [category, c] of checked) {
+    if (!byCategory.has(category) && c.total > 0) byCategory.set(category, []);
+  }
+
   const categories: CategoryStats[] = [...byCategory.entries()].map(([category, runs]) => ({
     category,
     tier: CATEGORY_TIER[category as BenchmarkCategory] ?? "extended",
@@ -228,6 +274,11 @@ export function aggregateRun(samples: RunSample[]): RunStats {
     ttft_p90_ms: percentile(runs.map((r) => r.ttftMs), 90),
     tpot_p50_ms: median(runs.map((r) => r.tpotMs)),
     tokens_mean: runs.reduce((a, r) => a + r.tokensGenerated, 0) / runs.length,
+    prefill_tps_p50: (() => {
+      const v = runs.map(prefillTps).filter((x): x is number => x != null && Number.isFinite(x));
+      return v.length > 0 ? median(v) : null;
+    })(),
+    check_pass_rate: checked.has(category) ? checked.get(category)!.passed / checked.get(category)!.total : null,
   }));
 
   // Validity: every base category present with enough runs.

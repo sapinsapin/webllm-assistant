@@ -191,6 +191,8 @@ async function downloadWithProgress(
 }
 
 export class MediaPipeEngine implements InferenceEngine {
+  /** LLM Inference API maxTokens (see load options below). */
+  readonly maxContextTokens = 2048;
   readonly type = "mediapipe" as const;
   readonly label = "MediaPipe (WebGPU)";
   private llm: LlmInference | null = null;
@@ -437,7 +439,10 @@ export class MediaPipeEngine implements InferenceEngine {
     await this.enqueue(() => new Promise<void>((resolve, reject) => {
       // Same inactivity watchdog as generateStream — previously this path
       // had no timeout at all and could hang a benchmark run forever.
-      const TIMEOUT_MS = 90_000;
+      // Prefill emits no partials, so the inactivity watchdog must scale with
+      // prompt length or long-context prompts time out unnecessarily
+      // (~50 ms/token budget on top of the 90 s floor).
+      const TIMEOUT_MS = Math.max(90_000, Math.round(prompt.length / 4) * 50);
       let timer: ReturnType<typeof setTimeout>;
       const armWatchdog = () => {
         clearTimeout(timer);

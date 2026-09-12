@@ -22,6 +22,42 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const LONG_CONTEXT_PASSAGE =
   "The following is a detailed technical document about distributed systems architecture. Distributed systems are collections of independent computers that appear to users as a single coherent system. They share state and coordinate actions through message passing. Key challenges include: (1) Network partitions - when nodes cannot communicate, the system must decide between consistency and availability per the CAP theorem. (2) Consensus - algorithms like Paxos and Raft ensure nodes agree on shared state despite failures. (3) Replication - data is copied across nodes for fault tolerance. (4) Consistency models range from strong (linearizability) to weak (eventual consistency). (5) Clock synchronization uses logical clocks like Lamport and vector clocks. (6) Failure detection uses heartbeats and phi-accrual detectors. (7) Sharding partitions data across nodes. (8) Load balancing distributes requests. (9) Service discovery enables nodes to find each other. (10) Observability via tracing, metrics, and structured logging is essential.";
 
+// Mirror of models.ts buildLongContext4k() — deterministic ~4K-token manual.
+function buildLongContext4k(): string {
+  const topics = [
+    ["consensus", "Raft", "leader election with randomized timeouts of 150 to 300 milliseconds"],
+    ["replication", "chain replication", "writes flow head to tail and reads are served by the tail"],
+    ["partitioning", "consistent hashing", "virtual nodes spread load with 128 tokens per physical node"],
+    ["caching", "write-through caching", "every write updates the cache and the store before acknowledging"],
+    ["messaging", "at-least-once delivery", "consumers must be idempotent because duplicates can occur"],
+    ["scheduling", "work stealing", "idle workers pull tasks from the tail of a busy worker's deque"],
+    ["storage", "log-structured merge trees", "writes append to a memtable that is flushed into sorted runs"],
+    ["observability", "distributed tracing", "each span records a parent identifier and a monotonic clock"],
+    ["security", "mutual TLS", "both peers present certificates issued by the cluster authority"],
+    ["networking", "gossip protocols", "each node contacts three random peers every 200 milliseconds"],
+    ["time", "hybrid logical clocks", "a physical timestamp is paired with a logical counter"],
+    ["failure", "phi accrual detection", "suspicion grows continuously with the inter-arrival distribution"],
+  ];
+  const sections: string[] = [];
+  for (let i = 0; i < topics.length; i++) {
+    const [area, name, fact] = topics[i];
+    sections.push([
+      `Section ${i + 1}: ${area}. The recommended technique in this section is ${name}; ${fact}.`,
+      `Operators adopting ${name} should document the failure modes, rehearse recovery, and record the observed latency distribution for every deployment tier.`,
+      `Capacity planning for ${area} assumes steady growth, so the team reviews utilisation weekly and adjusts limits before saturation rather than after incidents.`,
+      `A common mistake with ${name} is tuning parameters on a quiet cluster; production traffic has bursts, so validation must include synthetic load at three times the median.`,
+      `Runbooks for ${area} list the dashboards to open, the alerts that fire first, the safe mitigations, and who is paged when the mitigation does not restore service.`,
+      `Finally, ${name} interacts with the other sections: changes here can shift load onto neighbouring subsystems, which is why rollouts proceed one region at a time.`,
+    ].join(" "));
+  }
+  let text = `This document is a distributed systems operations manual with ${topics.length} sections.\n\n` + sections.join("\n\n");
+  const appendix =
+    " Appendix note: all figures in this manual are illustrative, measured on a reference cluster of twelve nodes, and should be re-validated before being used as service level objectives.";
+  while (text.length < 16_000) text += appendix;
+  return text;
+}
+const LONG_CONTEXT_4K_PASSAGE = buildLongContext4k();
+
 const BENCHMARK_PROMPTS = [
   { label: "Single word", prompt: "What is 2+2? Reply with just the number.", category: "ttft" },
   { label: "Yes/No", prompt: "Is the sky blue? Answer only yes or no.", category: "ttft" },
@@ -35,8 +71,13 @@ const BENCHMARK_PROMPTS = [
   { label: "Logic", prompt: "There are 5 houses in a row. The red house is to the left of the blue house. The green house is between the red and yellow houses. The white house is at the far right. What is the order of houses from left to right? Think step by step.", category: "reasoning" },
   { label: "Context QA", prompt: "Based on the document above, what are the two main consensus algorithms mentioned and why are they important?", category: "long_context", context: LONG_CONTEXT_PASSAGE },
   { label: "Context Summary", prompt: "Summarize the above document in exactly 3 bullet points.", category: "long_context", context: LONG_CONTEXT_PASSAGE },
+  { label: "4K Context QA", prompt: "Based on the manual above, which technique does Section 7 recommend, and what does it say about the memtable? Answer in one sentence.", category: "long_context_4k", context: LONG_CONTEXT_4K_PASSAGE, runs: 1 },
   { label: "3-turn chat", prompt: "What is photosynthesis?", category: "multi_turn", turns: ["What is photosynthesis?", "What are the two main stages?", "Why is it important for life on Earth?"] },
   { label: "5-turn drill", prompt: "Name a programming language.", category: "multi_turn", turns: ["Name a programming language.", "What is it mainly used for?", "Give me a simple code example.", "What are its main advantages?", "What are its main disadvantages?"] },
+  { label: "JSON object", prompt: 'Return a JSON object describing a fictional person with exactly the keys "name", "age" and "city". Output only the JSON, nothing else.', category: "structured", check: { kind: "json", requiredKeys: ["name", "age", "city"] } },
+  { label: "JSON array", prompt: "List the three primary colors as a JSON array of strings. Output only the JSON array.", category: "structured", check: { kind: "json", arrayMinLength: 3 } },
+  { label: "Python function", prompt: "Write a Python function named is_palindrome(s) that returns True when the string s reads the same forwards and backwards. Output only the code.", category: "code", check: { kind: "regex", all: ["def\\s+is_palindrome\\s*\\(", "return"] } },
+  { label: "JavaScript function", prompt: "Write a JavaScript function named sumArray(arr) that returns the sum of the numbers in arr. Output only the code.", category: "code", check: { kind: "regex", all: ["sumArray\\s*(=|\\()", "return"] } },
   { label: "2× parallel", prompt: "What is the speed of light?", category: "concurrent", concurrency: 2 },
   { label: "4× parallel", prompt: "Define gravity in one sentence.", category: "concurrent", concurrency: 4 },
 ];
@@ -47,6 +88,8 @@ const METHODOLOGY_VERSION = "2026.09";
 
 const METHODOLOGY = {
   spec_version: METHODOLOGY_VERSION,
+  rounds: ["2026.09"], // every published round; results compare only within a round
+  changelog_url: "https://github.com/sapinsapin/webllm-assistant/blob/main/docs/METHODOLOGY_CHANGELOG.md",
   rules_url: "https://github.com/sapinsapin/webllm-assistant/blob/main/docs/BENCHMARK_METHODOLOGY.md",
   scenario: "Single-stream: prompts run sequentially, 3 runs each; percentiles across runs (MLPerf-style).",
   metrics: {
@@ -55,11 +98,14 @@ const METHODOLOGY = {
     tpot_ms: "Time per output token in ms — inter-token decode latency. Reported as p50.",
     overall_score: "Geometric mean of the per-category MEDIAN tok/s across the five base categories.",
     latency_class: "interactive (TTFT p90 <= 500ms & TPOT p50 <= 30ms) | conversational (<= 2000ms & <= 100ms) | batch.",
+    prefill_tps_est: "Estimated prompt tokens (chars/4) / TTFT seconds; reported per category (long_context, long_context_4k). Prompts exceeding the engine's context window are skipped, not failed.",
+    output_check: "Prompts carrying a `check` (json: requiredKeys / arrayMinLength; regex: all patterns, case-insensitive) are accuracy-gated: a run whose output fails the check is recorded with passedCheck:false and excluded from that category's throughput; stats report check_pass_rate. Apply the same check when submitting.",
+    energy_proxy: "conditions.energy: battery percentage points per 1,000 generated tokens from the Battery Status API level drop across the suite (MLPerf energy-per-stream proxy). Valid only on battery for the whole run and when the drop exceeds the 1% reporting resolution; otherwise valid:false with a reason.",
     verdict: "On overall_score: 'Yes, you can AI!' >= 15, 'Mostly, yes' >= 6, 'Barely…' >= 1, else 'No, not yet'.",
   },
   tiers: {
     base: ["ttft", "short", "medium", "long", "reasoning"],
-    extended: ["long_context", "multi_turn", "concurrent"],
+    extended: ["long_context", "long_context_4k", "multi_turn", "concurrent", "structured", "code"],
     note: "Only base categories contribute to overall_score; extended categories are reported.",
   },
   divisions: {
@@ -70,10 +116,11 @@ const METHODOLOGY = {
     min_runs_per_base_category: 3,
     quality_gate: "Mean keyword-eval score >= 0.5 on the 6-prompt smoke set is required for result_tier 'certified'.",
     result_tiers: ["certified", "valid", "invalid", "reported"],
+    audit: "Reproducibility audit (view benchmark_audit): within a round, a certified run scoring > 2x its device's median (device with >= 5 certified runs) is treated as 'valid' — listed, excluded from get_leaderboard. Computed at read time.",
   },
   leaderboard: "get_leaderboard: median-of-N certified runs per (device, model, engine) within a round; runs = N is the confidence.",
   runs_per_prompt: 3,
-  categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "multi_turn", "concurrent"],
+  categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "long_context_4k", "multi_turn", "concurrent", "structured", "code"],
 };
 
 const PRESET_MODELS = [
@@ -106,6 +153,8 @@ interface CommunityQueryArgs {
   model_name?: string;
   engine?: string;
   device_type?: string;
+  /** Methodology round, e.g. "2026.09"; "legacy" = rows without a round. */
+  spec_version?: string;
   limit?: number;
 }
 
@@ -168,7 +217,7 @@ const mcp = new McpServer({
 mcp.tool({
   name: "list_benchmark_prompts",
   description:
-    "Return the full Can I AI benchmark suite (16 prompts across 8 categories). Run each prompt locally with your model and submit the result via submit_benchmark_run.",
+    "Return the full Can I AI benchmark suite (21 prompts across 11 categories; long_context_4k runs once; structured/code prompts carry an output check). Run each prompt locally with your model and submit the result via submit_benchmark_run.",
   inputSchema: { type: "object", properties: {} },
   handler: async () => ({
     content: [{ type: "text", text: JSON.stringify({ prompts: BENCHMARK_PROMPTS, methodology: METHODOLOGY }, null, 2) }],
@@ -203,6 +252,7 @@ mcp.tool({
       model_name: { type: "string", description: "Substring to match against model_name" },
       engine: { type: "string", description: "mediapipe | webllm | onnx" },
       device_type: { type: "string", description: "desktop | mobile | tablet" },
+      spec_version: { type: "string", description: "Methodology round (e.g. 2026.09) or 'legacy' for pre-round rows; omit for all" },
       limit: { type: "number", description: "Max rows (1-100)", default: 25 },
     },
   },
@@ -211,13 +261,15 @@ mcp.tool({
     let q = supabase
       .from("benchmark_runs")
       .select(
-        "id, created_at, model_name, engine, avg_tps, avg_ttft_ms, verdict, device_model, device_type, os, browser, gpu, ram_gb, country",
+        "id, created_at, model_name, engine, avg_tps, avg_ttft_ms, verdict, device_model, device_type, os, browser, gpu, ram_gb, country, spec_version, division, result_tier, overall_score",
       )
       .order("created_at", { ascending: false })
       .limit(limit);
     if (args?.model_name) q = q.ilike("model_name", `%${args.model_name}%`);
     if (args?.engine) q = q.eq("engine", args.engine);
     if (args?.device_type) q = q.eq("device_type", args.device_type);
+    if (args?.spec_version === "legacy") q = q.is("spec_version", null);
+    else if (args?.spec_version) q = q.eq("spec_version", args.spec_version);
     const { data, error } = await q;
     if (error) {
       return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };

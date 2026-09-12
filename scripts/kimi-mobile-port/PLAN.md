@@ -79,6 +79,16 @@ parity-testing against the reference model requires it.
 
 ## Checkpoint log
 
+- 2026-09-12: **Upstream SiLU PR opened:**
+  [google-ai-edge/LiteRT#9930](https://github.com/google-ai-edge/LiteRT/pull/9930)
+  (fork `internetoftim/LiteRT`, branch `moe-silu-activation`) — adds
+  `activation='silu'` to the XNNPACK moe kernel, CPU path only (GPU
+  parser deliberately untouched — can't validate its expert body from
+  outside). Re-verified before patching: upstream still gelu-only, and
+  the CPU kernel now also parses int4 weight_type (moved since the M2
+  probe). M3 (full Moonlight convert) attempt started on the 32 GB M4
+  Mac: 4-layer real-weight slice first, then full 27-layer with a
+  memory strategy; results pending.
 - 2026-08-08 (M2 done): **toy `.tflite` works, numerically verified — no
   converter blockers.** Real converter path on the M1 tiny config with
   `litert_moe_sequential`: one flatbuffer, prefill+decode signatures,

@@ -1,4 +1,5 @@
 import type { EngineType } from "./inference/types";
+import type { OutputCheck } from "./benchmark/outputCheck";
 
 export interface ModelPreset {
   id: string;
@@ -152,7 +153,7 @@ export function getGemma4Model(capabilities: { engine: EngineType; available: bo
   return PRESET_MODELS.find(m => m.id === "gemma-4-e2b") || null;
 }
 
-export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning" | "long_context" | "multi_turn" | "concurrent";
+export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning" | "long_context" | "long_context_4k" | "multi_turn" | "concurrent" | "structured" | "code";
 
 export interface BenchmarkPrompt {
   label: string;
@@ -165,7 +166,59 @@ export interface BenchmarkPrompt {
   concurrency?: number;
   /** For long_context: prefix context to prepend to the prompt */
   context?: string;
+  /** Runs per prompt override (default RUNS_PER_PROMPT in the suite). Long
+   * prefills use 1 to keep the suite's wall time bounded. */
+  runs?: number;
+  /** Deterministic correctness check; a run failing it is excluded from the
+   * category's throughput stats (MLPerf accuracy-target rule). */
+  check?: OutputCheck;
 }
+
+/**
+ * Deterministic ~4K-token passage (≈16,000 chars) for the 4K-context prompt
+ * (MLPerf Client mandates 4K prompt lengths). Built from fixed sections with
+ * numbered, answerable facts so the QA prompt has a keyword-checkable answer.
+ * Deterministic ⇒ identical across devices and rounds.
+ */
+export function buildLongContext4k(): string {
+  const topics = [
+    ["consensus", "Raft", "leader election with randomized timeouts of 150 to 300 milliseconds"],
+    ["replication", "chain replication", "writes flow head to tail and reads are served by the tail"],
+    ["partitioning", "consistent hashing", "virtual nodes spread load with 128 tokens per physical node"],
+    ["caching", "write-through caching", "every write updates the cache and the store before acknowledging"],
+    ["messaging", "at-least-once delivery", "consumers must be idempotent because duplicates can occur"],
+    ["scheduling", "work stealing", "idle workers pull tasks from the tail of a busy worker's deque"],
+    ["storage", "log-structured merge trees", "writes append to a memtable that is flushed into sorted runs"],
+    ["observability", "distributed tracing", "each span records a parent identifier and a monotonic clock"],
+    ["security", "mutual TLS", "both peers present certificates issued by the cluster authority"],
+    ["networking", "gossip protocols", "each node contacts three random peers every 200 milliseconds"],
+    ["time", "hybrid logical clocks", "a physical timestamp is paired with a logical counter"],
+    ["failure", "phi accrual detection", "suspicion grows continuously with the inter-arrival distribution"],
+  ];
+  const sections: string[] = [];
+  for (let i = 0; i < topics.length; i++) {
+    const [area, name, fact] = topics[i];
+    const lines = [
+      `Section ${i + 1}: ${area}. The recommended technique in this section is ${name}; ${fact}.`,
+      `Operators adopting ${name} should document the failure modes, rehearse recovery, and record the observed latency distribution for every deployment tier.`,
+      `Capacity planning for ${area} assumes steady growth, so the team reviews utilisation weekly and adjusts limits before saturation rather than after incidents.`,
+      `A common mistake with ${name} is tuning parameters on a quiet cluster; production traffic has bursts, so validation must include synthetic load at three times the median.`,
+      `Runbooks for ${area} list the dashboards to open, the alerts that fire first, the safe mitigations, and who is paged when the mitigation does not restore service.`,
+      `Finally, ${name} interacts with the other sections: changes here can shift load onto neighbouring subsystems, which is why rollouts proceed one region at a time.`,
+    ];
+    sections.push(lines.join(" "));
+  }
+  const base = `This document is a distributed systems operations manual with ${topics.length} sections.\n\n` + sections.join("\n\n");
+  // Pad deterministically to the 4K-token class (~16,000 chars) with a
+  // repeated appendix paragraph, so the prompt length is stable.
+  const appendix =
+    " Appendix note: all figures in this manual are illustrative, measured on a reference cluster of twelve nodes, and should be re-validated before being used as service level objectives.";
+  let text = base;
+  while (text.length < 16_000) text += appendix;
+  return text;
+}
+
+export const LONG_CONTEXT_4K_PASSAGE = buildLongContext4k();
 
 const LONG_CONTEXT_PASSAGE = `The following is a detailed technical document about distributed systems architecture. Distributed systems are collections of independent computers that appear to users as a single coherent system. They share state and coordinate actions through message passing. Key challenges include: (1) Network partitions - when nodes cannot communicate, the system must decide between consistency and availability per the CAP theorem. (2) Consensus - algorithms like Paxos and Raft ensure nodes agree on shared state despite failures. (3) Replication - data is copied across nodes for fault tolerance, using strategies like leader-follower or multi-leader replication. (4) Consistency models range from strong (linearizability) to weak (eventual consistency). (5) Clock synchronization is difficult; logical clocks (Lamport, vector) provide ordering without wall-clock agreement. (6) Failure detection uses heartbeats and phi-accrual detectors. (7) Sharding partitions data across nodes using hash or range partitioning. (8) Load balancing distributes requests evenly. (9) Service discovery enables nodes to find each other dynamically. (10) Observability through distributed tracing, metrics, and structured logging is essential for debugging. Modern microservice architectures face all these challenges simultaneously, requiring careful trade-off analysis for each subsystem.`;
 
@@ -176,8 +229,11 @@ export const BENCHMARK_CATEGORIES: Record<BenchmarkCategory, { label: string; de
   long: { label: "Long", description: "Long generation (~multiple paragraphs)" },
   reasoning: { label: "Reasoning", description: "Multi-step reasoning tasks" },
   long_context: { label: "Long Context", description: "Large input context — measures prefill speed at scale" },
+  long_context_4k: { label: "4K Context", description: "~4K-token input (MLPerf Client class) — prefill throughput; skipped where the engine's context window is smaller" },
   multi_turn: { label: "Multi-Turn", description: "Multi-turn conversation — measures context accumulation overhead" },
   concurrent: { label: "Concurrent", description: "Parallel requests — measures throughput under load" },
+  structured: { label: "Structured", description: "JSON output — throughput counts only when the output parses and has the required shape" },
+  code: { label: "Code", description: "Code generation — throughput counts only when the required function is produced" },
 };
 
 export const BENCHMARK_PROMPTS: BenchmarkPrompt[] = [
@@ -209,6 +265,16 @@ export const BENCHMARK_PROMPTS: BenchmarkPrompt[] = [
     context: LONG_CONTEXT_PASSAGE,
   },
 
+  // 4K context (extended; 1 run — a 4K prefill is expensive on slow devices)
+  {
+    label: "4K Context QA",
+    prompt: "Based on the manual above, which technique does Section 7 recommend, and what does it say about the memtable? Answer in one sentence.",
+    category: "long_context_4k",
+    description: "QA over a ~4K-token manual — estimated prefill tok/s",
+    context: LONG_CONTEXT_4K_PASSAGE,
+    runs: 1,
+  },
+
   // Multi-turn
   {
     label: "3-turn chat",
@@ -233,6 +299,38 @@ export const BENCHMARK_PROMPTS: BenchmarkPrompt[] = [
       "What are its main advantages?",
       "What are its main disadvantages?",
     ],
+  },
+
+  // Structured output (extended, output-checked — MLPerf Client base category)
+  {
+    label: "JSON object",
+    prompt: 'Return a JSON object describing a fictional person with exactly the keys "name", "age" and "city". Output only the JSON, nothing else.',
+    category: "structured",
+    description: "JSON object with required keys",
+    check: { kind: "json", requiredKeys: ["name", "age", "city"] },
+  },
+  {
+    label: "JSON array",
+    prompt: "List the three primary colors as a JSON array of strings. Output only the JSON array.",
+    category: "structured",
+    description: "JSON array of ≥ 3 strings",
+    check: { kind: "json", arrayMinLength: 3 },
+  },
+
+  // Code (extended, output-checked — MLPerf Client base category)
+  {
+    label: "Python function",
+    prompt: "Write a Python function named is_palindrome(s) that returns True when the string s reads the same forwards and backwards. Output only the code.",
+    category: "code",
+    description: "Must define is_palindrome and return",
+    check: { kind: "regex", all: ["def\\s+is_palindrome\\s*\\(", "return"] },
+  },
+  {
+    label: "JavaScript function",
+    prompt: "Write a JavaScript function named sumArray(arr) that returns the sum of the numbers in arr. Output only the code.",
+    category: "code",
+    description: "Must define sumArray and return",
+    check: { kind: "regex", all: ["sumArray\\s*(=|\\()", "return"] },
   },
 
   // Concurrent

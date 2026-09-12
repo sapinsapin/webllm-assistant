@@ -1,22 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const h = vi.hoisted(() => ({
   rangeMock: vi.fn(),
+  eqMock: vi.fn(),
+  isMock: vi.fn(),
+  inMock: vi.fn(),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: () => ({
-      select: () => ({
-        order: () => ({
-          range: h.rangeMock,
-        }),
-      }),
-    }),
-  },
-}));
+// Chainable query builder: select → (eq | is)* → order → range, plus the
+// audit lookup select → in (resolves directly).
+vi.mock("@/integrations/supabase/client", () => {
+  const chain: Record<string, unknown> = {};
+  chain.eq = (...a: unknown[]) => { h.eqMock(...a); return chain; };
+  chain.is = (...a: unknown[]) => { h.isMock(...a); return chain; };
+  chain.order = () => chain;
+  chain.range = (...a: unknown[]) => h.rangeMock(...a);
+  chain.in = (...a: unknown[]) => h.inMock(...a);
+  return { supabase: { from: () => ({ select: () => chain }) } };
+});
 
 import { CommunityBenchmarks } from "./CommunityBenchmarks";
 
@@ -50,6 +53,9 @@ const run = (over: Partial<Record<string, unknown>> = {}) => ({
 describe("CommunityBenchmarks states", () => {
   beforeEach(() => {
     h.rangeMock.mockReset();
+    h.eqMock.mockReset();
+    h.isMock.mockReset();
+    h.inMock.mockReset().mockResolvedValue({ data: [], error: null });
   });
 
   it("shows loading skeletons while the query is pending", () => {
@@ -100,6 +106,49 @@ describe("CommunityBenchmarks states", () => {
     expect(screen.getByText("42.5")).toBeInTheDocument();
     // 2 results fit one page → no pagination controls
     expect(screen.queryByText("Next")).not.toBeInTheDocument();
+  });
+
+  it("does not filter by round by default, then filters by spec_version when a round is chosen", async () => {
+    h.rangeMock.mockResolvedValue({ data: [run()], count: 1, error: null });
+    renderWithQuery(<CommunityBenchmarks />);
+    await screen.findByText("MacBook Pro M4");
+    expect(h.eqMock).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Round" }), { target: { value: "2026.09" } });
+    await waitFor(() => expect(h.eqMock).toHaveBeenCalledWith("spec_version", "2026.09"));
+  });
+
+  it("maps the legacy round to spec_version IS NULL", async () => {
+    h.rangeMock.mockResolvedValue({ data: [], count: 0, error: null });
+    renderWithQuery(<CommunityBenchmarks />);
+    await screen.findByText(/No benchmark runs yet/);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Round" }), { target: { value: "legacy" } });
+    await waitFor(() => expect(h.isMock).toHaveBeenCalledWith("spec_version", null));
+    expect(await screen.findByText(/No runs in this round yet/)).toBeInTheDocument();
+  });
+
+  it("marks audit-flagged certified rows as outliers instead of certified", async () => {
+    h.rangeMock.mockResolvedValue({
+      data: [run({ id: "ok", result_tier: "certified" }), run({ id: "sus", device_model: "Pixel 9", result_tier: "certified", overall_score: 99 })],
+      count: 2,
+      error: null,
+    });
+    h.inMock.mockResolvedValue({ data: [{ id: "sus", flagged: true, device_median: 9.5, device_runs: 7 }, { id: "ok", flagged: false, device_median: 40, device_runs: 7 }], error: null });
+    renderWithQuery(<CommunityBenchmarks />);
+
+    expect(await screen.findByText("Pixel 9")).toBeInTheDocument();
+    expect(h.inMock).toHaveBeenCalledWith("id", ["ok", "sus"]);
+    expect(screen.getByText("⚠ outlier")).toBeInTheDocument();
+    expect(screen.getAllByText("✓ certified")).toHaveLength(1);
+  });
+
+  it("still renders the feed when the audit view is missing or fails", async () => {
+    h.rangeMock.mockResolvedValue({ data: [run({ result_tier: "certified" })], count: 1, error: null });
+    h.inMock.mockResolvedValue({ data: null, error: { code: "PGRST205", message: "Could not find the table 'public.benchmark_audit'" } });
+    renderWithQuery(<CommunityBenchmarks />);
+    expect(await screen.findByText("MacBook Pro M4")).toBeInTheDocument();
+    expect(screen.queryByText("⚠ outlier")).not.toBeInTheDocument();
   });
 
   it("shows pagination when there are more rows than one page", async () => {

@@ -20,6 +20,8 @@ import {
   qualityScoreFrom,
   resultTierFor,
   sampleProblem,
+  estimatePromptTokens,
+  prefillTps,
   type RunSample,
 } from "./spec";
 import { PRESET_MODELS, BENCHMARK_PROMPTS } from "@/lib/models";
@@ -242,5 +244,59 @@ describe("MCP edge function parity", () => {
       if (v.min > 0) expect(src, v.label).toMatch(new RegExp(`>=\\s*${v.min}\\)\\s*return\\s*"${v.label}"`));
     }
     expect(src).toContain(`"${VERDICTS[VERDICTS.length - 1].label}"`);
+  });
+});
+
+describe("prefill throughput estimate (4K-context item)", () => {
+  it("estimates prompt tokens at ~4 chars/token, never negative", () => {
+    expect(estimatePromptTokens(16_000)).toBe(4000);
+    expect(estimatePromptTokens(0)).toBe(0);
+    expect(estimatePromptTokens(-10)).toBe(0);
+  });
+
+  it("prefillTps = estimated prompt tokens / TTFT seconds; null without prompt length or TTFT", () => {
+    expect(prefillTps({ promptChars: 16_000, ttftMs: 2000 })).toBeCloseTo(2000, 6);
+    expect(prefillTps({ promptChars: undefined, ttftMs: 2000 })).toBeNull();
+    expect(prefillTps({ promptChars: 4000, ttftMs: 0 })).toBeNull();
+  });
+
+  it("aggregateRun reports a per-category median prefill tok/s only where prompt lengths are known", () => {
+    const stats = aggregateRun([
+      ...healthySuite(),
+      sample({ category: "long_context_4k", promptChars: 16_000, ttftMs: 4000, timeMs: 8000 }),
+      sample({ category: "long_context_4k", promptChars: 16_000, ttftMs: 2000, timeMs: 8000 }),
+      sample({ category: "long_context_4k", promptChars: 16_000, ttftMs: 1000, timeMs: 8000 }),
+    ]);
+    const c4k = stats.categories.find((c) => c.category === "long_context_4k")!;
+    expect(c4k.tier).toBe("extended");
+    expect(c4k.prefill_tps_p50).toBeCloseTo(2000, 6); // median of 1000, 2000, 4000
+    expect(stats.categories.find((c) => c.category === "short")!.prefill_tps_p50).toBeNull();
+    // extended: never affects the score or validity
+    expect(stats.validity.valid).toBe(true);
+  });
+});
+
+describe("output-checked categories (5.6)", () => {
+  it("a failed output check never counts as a performance sample, and the pass rate is reported", () => {
+    const stats = aggregateRun([
+      ...healthySuite(),
+      sample({ category: "structured", tokensPerSecond: 500, passedCheck: false }),
+      sample({ category: "structured", tokensPerSecond: 20, passedCheck: true }),
+      sample({ category: "structured", tokensPerSecond: 22, passedCheck: true }),
+    ]);
+    const c = stats.categories.find((x) => x.category === "structured")!;
+    expect(c.runs).toBe(2);
+    expect(c.tps_p50).toBe(20); // nearest-rank median of [20, 22]; the 500 tok/s garbage never entered
+    expect(c.check_pass_rate).toBeCloseTo(2 / 3, 6);
+    expect(stats.validity.reasons).toContain("output check failed in structured");
+    expect(stats.validity.valid).toBe(true); // extended: doesn't affect validity
+    expect(stats.categories.find((x) => x.category === "short")!.check_pass_rate).toBeNull();
+  });
+
+  it("a checked category where every run failed is still reported, with a 0 pass rate", () => {
+    const stats = aggregateRun([...healthySuite(), sample({ category: "code", passedCheck: false })]);
+    const c = stats.categories.find((x) => x.category === "code")!;
+    expect(c.runs).toBe(0);
+    expect(c.check_pass_rate).toBe(0);
   });
 });

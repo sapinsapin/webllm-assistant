@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { PRESET_MODELS, getModelsForEngine, getSmallestModel, getBestQuickStartModel, getGemma4Model } from "./models";
+import { PRESET_MODELS, BENCHMARK_PROMPTS, LONG_CONTEXT_4K_PASSAGE, buildLongContext4k, getModelsForEngine, getSmallestModel, getBestQuickStartModel, getGemma4Model } from "./models";
+import { checkOutput } from "./benchmark/outputCheck";
 
 describe("PRESET_MODELS", () => {
   it("has unique ids", () => {
@@ -89,5 +90,48 @@ describe("getGemma4Model", () => {
       ])
     ).toBeNull();
     expect(getGemma4Model([])).toBeNull();
+  });
+});
+
+describe("4K-context prompt (MLPerf Client 4K prompt class)", () => {
+  const p4k = BENCHMARK_PROMPTS.find((p) => p.category === "long_context_4k")!;
+
+  it("exists as a single-run extended prompt with a ~4K-token context", () => {
+    expect(p4k).toBeDefined();
+    expect(p4k.runs).toBe(1);
+    expect(p4k.context).toBe(LONG_CONTEXT_4K_PASSAGE);
+    expect(LONG_CONTEXT_4K_PASSAGE.length).toBeGreaterThanOrEqual(16_000);
+    expect(LONG_CONTEXT_4K_PASSAGE.length).toBeLessThan(17_000);
+  });
+
+  it("is deterministic — identical on every device and run", () => {
+    expect(buildLongContext4k()).toBe(LONG_CONTEXT_4K_PASSAGE);
+  });
+
+  it("the QA question is answerable from the passage (Section 7 → LSM trees / memtable)", () => {
+    expect(LONG_CONTEXT_4K_PASSAGE).toContain("Section 7: storage. The recommended technique in this section is log-structured merge trees");
+    expect(LONG_CONTEXT_4K_PASSAGE).toContain("memtable");
+  });
+});
+
+describe("structured-output and code prompts (5.6)", () => {
+  const checked = BENCHMARK_PROMPTS.filter((p) => p.category === "structured" || p.category === "code");
+
+  it("every structured/code prompt carries an output check", () => {
+    expect(checked.length).toBe(4);
+    for (const p of checked) expect(p.check, p.label).toBeDefined();
+  });
+
+  it("the checks accept a correct answer and reject a plausible wrong one", () => {
+    const byLabel = Object.fromEntries(checked.map((p) => [p.label, p.check!]));
+    expect(checkOutput(byLabel["JSON object"], '{"name":"Ada","age":36,"city":"London"}')).toBe(true);
+    expect(checkOutput(byLabel["JSON object"], '{"name":"Ada"}')).toBe(false);
+    expect(checkOutput(byLabel["JSON array"], '["red","yellow","blue"]')).toBe(true);
+    expect(checkOutput(byLabel["JSON array"], "red, yellow, blue")).toBe(false);
+    expect(checkOutput(byLabel["Python function"], "def is_palindrome(s):\n    return s == s[::-1]")).toBe(true);
+    expect(checkOutput(byLabel["Python function"], "print('hello')")).toBe(false);
+    expect(checkOutput(byLabel["JavaScript function"], "function sumArray(arr) { return arr.reduce((a, b) => a + b, 0); }")).toBe(true);
+    expect(checkOutput(byLabel["JavaScript function"], "const sumArray = (arr) => { return arr.reduce((a, b) => a + b, 0); };")).toBe(true);
+    expect(checkOutput(byLabel["JavaScript function"], "I cannot write code.")).toBe(false);
   });
 });
