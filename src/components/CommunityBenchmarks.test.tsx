@@ -6,15 +6,18 @@ const h = vi.hoisted(() => ({
   rangeMock: vi.fn(),
   eqMock: vi.fn(),
   isMock: vi.fn(),
+  inMock: vi.fn(),
 }));
 
-// Chainable query builder: select → (eq | is)* → order → range
+// Chainable query builder: select → (eq | is)* → order → range, plus the
+// audit lookup select → in (resolves directly).
 vi.mock("@/integrations/supabase/client", () => {
   const chain: Record<string, unknown> = {};
   chain.eq = (...a: unknown[]) => { h.eqMock(...a); return chain; };
   chain.is = (...a: unknown[]) => { h.isMock(...a); return chain; };
   chain.order = () => chain;
   chain.range = (...a: unknown[]) => h.rangeMock(...a);
+  chain.in = (...a: unknown[]) => h.inMock(...a);
   return { supabase: { from: () => ({ select: () => chain }) } };
 });
 
@@ -52,6 +55,7 @@ describe("CommunityBenchmarks states", () => {
     h.rangeMock.mockReset();
     h.eqMock.mockReset();
     h.isMock.mockReset();
+    h.inMock.mockReset().mockResolvedValue({ data: [], error: null });
   });
 
   it("shows loading skeletons while the query is pending", () => {
@@ -122,6 +126,29 @@ describe("CommunityBenchmarks states", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Round" }), { target: { value: "legacy" } });
     await waitFor(() => expect(h.isMock).toHaveBeenCalledWith("spec_version", null));
     expect(await screen.findByText(/No runs in this round yet/)).toBeInTheDocument();
+  });
+
+  it("marks audit-flagged certified rows as outliers instead of certified", async () => {
+    h.rangeMock.mockResolvedValue({
+      data: [run({ id: "ok", result_tier: "certified" }), run({ id: "sus", device_model: "Pixel 9", result_tier: "certified", overall_score: 99 })],
+      count: 2,
+      error: null,
+    });
+    h.inMock.mockResolvedValue({ data: [{ id: "sus", flagged: true, device_median: 9.5, device_runs: 7 }, { id: "ok", flagged: false, device_median: 40, device_runs: 7 }], error: null });
+    renderWithQuery(<CommunityBenchmarks />);
+
+    expect(await screen.findByText("Pixel 9")).toBeInTheDocument();
+    expect(h.inMock).toHaveBeenCalledWith("id", ["ok", "sus"]);
+    expect(screen.getByText("⚠ outlier")).toBeInTheDocument();
+    expect(screen.getAllByText("✓ certified")).toHaveLength(1);
+  });
+
+  it("still renders the feed when the audit view is missing or fails", async () => {
+    h.rangeMock.mockResolvedValue({ data: [run({ result_tier: "certified" })], count: 1, error: null });
+    h.inMock.mockResolvedValue({ data: null, error: { code: "PGRST205", message: "Could not find the table 'public.benchmark_audit'" } });
+    renderWithQuery(<CommunityBenchmarks />);
+    expect(await screen.findByText("MacBook Pro M4")).toBeInTheDocument();
+    expect(screen.queryByText("⚠ outlier")).not.toBeInTheDocument();
   });
 
   it("shows pagination when there are more rows than one page", async () => {

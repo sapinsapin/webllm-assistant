@@ -24,4 +24,5 @@ First MLPerf-style round.
 - **Latency classes**: interactive 500/30 ms, conversational 2000/100 ms, else batch.
 - **Verdicts**: ≥ 15 / ≥ 6 / ≥ 1 tok/s.
 - **Leaderboards**: median-of-N certified runs per device × model × engine (`benchmark_leaderboard` view, MCP `get_leaderboard`).
+- **Within-round rule (no round change)**: reproducibility audit — certified runs > 2× their device median (≥ 5 runs) are treated as unranked (`benchmark_audit` view).
 - **Extended additions (no round change)**: `long_context_4k` prompt (1 run) with estimated prefill tok/s; engines declare `maxContextTokens` and oversized prompts are skipped. The round fingerprint covers **base-tier prompts only** (extended prompts are never scored), so its value was recomputed once when that definition was narrowed — see the fingerprint in the heading.

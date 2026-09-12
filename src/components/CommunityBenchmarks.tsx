@@ -6,6 +6,7 @@ import { Cpu, Smartphone, Monitor, Tablet, Zap, Clock, MapPin, HardDrive, Memory
 import { formatDistanceToNow } from "date-fns";
 import { isSchemaMismatch } from "@/lib/supabaseCompat";
 import { LEGACY_ROUND } from "@/lib/benchmark/round";
+import type { AuditFlag } from "@/lib/benchmark/audit";
 import { RoundPicker } from "@/components/RoundPicker";
 
 interface BenchRun {
@@ -88,7 +89,7 @@ const PAGE_SIZE = 10;
 
 /** Fetch one page of community runs. Throws on error so React Query can retry
  * and surface a real error state — an error must never render as "no runs". */
-async function fetchBenchmarkPage(page: number, round: string): Promise<{ runs: BenchRun[]; totalCount: number }> {
+async function fetchBenchmarkPage(page: number, round: string): Promise<{ runs: BenchRun[]; totalCount: number; flags: Record<string, Pick<AuditFlag, "device_median" | "device_runs">> }> {
   const from = page * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
   const LEGACY_COLS = "id,created_at,device_model,device_type,avg_tps,avg_ttft_ms,verdict,model_name,engine,browser,os,country,city,cores,ram_gb,gpu,gpu_vendor,screen_res";
@@ -109,7 +110,30 @@ async function fetchBenchmarkPage(page: number, round: string): Promise<{ runs: 
     ({ data, count, error } = await fetchPage(LEGACY_COLS, false));
   }
   if (error) throw new Error(error.message);
-  return { runs: (data as unknown as BenchRun[]) ?? [], totalCount: count ?? 0 };
+  const runs = (data as unknown as BenchRun[]) ?? [];
+  return { runs, totalCount: count ?? 0, flags: await fetchAuditFlags(runs) };
+}
+
+/** Reproducibility-audit flags for the certified rows on this page. Best
+ * effort: a missing view (pre-migration) or a failure just means no badges —
+ * it must never turn a loaded feed into an error state. */
+async function fetchAuditFlags(runs: BenchRun[]): Promise<Record<string, Pick<AuditFlag, "device_median" | "device_runs">>> {
+  const ids = runs.filter((r) => r.result_tier === "certified").map((r) => r.id);
+  if (ids.length === 0) return {};
+  try {
+    const { data, error } = await supabase
+      .from("benchmark_audit")
+      .select("id,flagged,device_median,device_runs")
+      .in("id", ids);
+    if (error || !data) return {};
+    const out: Record<string, Pick<AuditFlag, "device_median" | "device_runs">> = {};
+    for (const a of data as { id: string | null; flagged: boolean | null; device_median: number | null; device_runs: number | null }[]) {
+      if (a.id && a.flagged) out[a.id] = { device_median: a.device_median ?? 0, device_runs: a.device_runs ?? 0 };
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 export function CommunityBenchmarks() {
@@ -129,6 +153,7 @@ export function CommunityBenchmarks() {
 
   const runs = data?.runs ?? [];
   const totalCount = data?.totalCount ?? 0;
+  const flags = data?.flags ?? {};
 
   const picker = (
     <div className="flex justify-end">
@@ -226,7 +251,14 @@ export function CommunityBenchmarks() {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  {run.result_tier && TIER_BADGE[run.result_tier] && (
+                  {flags[run.id] ? (
+                    <span
+                      className="hidden sm:inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-mono text-orange-400 border-orange-400/30 bg-orange-400/10"
+                      title={`Audit: > 2× this device's median (${flags[run.id].device_median.toFixed(1)} tok/s over ${flags[run.id].device_runs} runs) — treated as unranked`}
+                    >
+                      ⚠ outlier
+                    </span>
+                  ) : run.result_tier && TIER_BADGE[run.result_tier] && (
                     <span className={`hidden sm:inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-mono ${TIER_BADGE[run.result_tier].cls}`}>
                       {TIER_BADGE[run.result_tier].label}
                     </span>

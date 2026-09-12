@@ -157,6 +157,17 @@ export type Database = {
       }
     }
     Views: {
+      benchmark_audit: {
+        Row: {
+          id: string | null
+          overall_score: number | null
+          device_median: number | null
+          device_runs: number | null
+          flagged: boolean | null
+          effective_tier: string | null
+        }
+        Relationships: []
+      }
       benchmark_leaderboard: {
         Row: {
           spec_version: string | null
@@ -178,7 +189,10 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      benchmark_device_key: {
+        Args: { device_model: string | null; os: string | null; gpu: string | null }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

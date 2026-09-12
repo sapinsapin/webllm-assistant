@@ -111,6 +111,7 @@ const METHODOLOGY = {
     min_runs_per_base_category: 3,
     quality_gate: "Mean keyword-eval score >= 0.5 on the 6-prompt smoke set is required for result_tier 'certified'.",
     result_tiers: ["certified", "valid", "invalid", "reported"],
+    audit: "Reproducibility audit (view benchmark_audit): within a round, a certified run scoring > 2x its device's median (device with >= 5 certified runs) is treated as 'valid' — listed, excluded from get_leaderboard. Computed at read time.",
   },
   leaderboard: "get_leaderboard: median-of-N certified runs per (device, model, engine) within a round; runs = N is the confidence.",
   runs_per_prompt: 3,

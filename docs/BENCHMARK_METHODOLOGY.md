@@ -22,7 +22,7 @@ The implementation of everything below is `src/lib/benchmark/spec.ts`
 | Base / Extended / Experimental | Only base components contribute to the official score; extended (e.g. 4K/8K prompts) may not run on every system | Base categories (ttft, short, medium, long, reasoning) score; extended (long_context, long_context_4k, multi_turn, concurrent) are reported only; prompts exceeding the engine's context window are **skipped with a reason**, not failed |
 | LLM metrics | TTFT + TPS (excl. first token); TPOT/TTFT constraints: interactive 500/30 ms, conversational 2000/100 ms | Same metrics; every run gets a `latency_class` — interactive / conversational / batch — from TTFT p90 and TPOT p50 |
 | Overall score | Per-category scores combined (MLPerf Client) | **Geometric mean** of base-category median tok/s (scale-robust, outlier-resistant) |
-| LoadGen validity | Minimum query counts, sanity checks, audit | `validateRun`: ≥ 3 valid runs per base category, per-sample sanity (finite, TTFT ≤ total, ≥ 4 tokens), throttling detection → `result_tier` |
+| LoadGen validity | Minimum query counts, sanity checks, **audit** | `validateRun`: ≥ 3 valid runs per base category, per-sample sanity (finite, TTFT ≤ total, ≥ 4 tokens), throttling detection → `result_tier`; **reproducibility audit** demotes implausible outliers (§10) |
 | System description | Submitter, software, system, processor, accelerator, code | Device model / GPU / RAM / cores / OS / browser + `engine`, `model_id`, `spec_version`, run `conditions` |
 | Test conditions (Mobile principle #4) | Ambient temperature, battery; energy per stream via power meter | `conditions`: battery level/charging at start and end, tab visibility, network type, suite duration; `thermal_decay` flags throttling; **energy proxy** = battery % per 1k generated tokens (§9) |
 | Versioned rounds | v0.7 … v6.0; results comparable within a version; release notes | `spec_version` + fingerprint-pinned `ROUND_REGISTRY` (a test fails if round inputs change without a new round); [changelog](./METHODOLOGY_CHANGELOG.md); feed and leaderboard filter by round |
@@ -76,7 +76,7 @@ autonomous cloud routine works through unchecked items in order.
 - [x] **5.2 Reference-model rounds** — bump `spec_version` when reference presets or prompts change; `docs/METHODOLOGY_CHANGELOG.md` like MLPerf release notes; feed filter by round.
 - [x] **5.3 4K-context prompt** (MLPerf Client mandates 4K prompt lengths) as an extended category, with a prefill-throughput metric (prompt tokens/s).
 - [x] **5.4 Energy proxy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery % per 1k tokens" (conditions already capture battery level).
-- [ ] **5.5 Reproducibility audit** — flag certified results whose device model has ≥ 5 runs and whose score is > 2× the device median (outlier demotion to `valid`).
+- [x] **5.5 Reproducibility audit** — flag certified results whose device model has ≥ 5 runs and whose score is > 2× the device median (outlier demotion to `valid`).
 - [ ] **5.6 Structured-output and code tasks** (MLPerf Client base categories) as scored base prompts once the eval judge can gate them.
 - [x] **5.7 MCP parity for leaderboards** — `get_leaderboard` tool so external agents can query the same aggregates.
 
@@ -107,3 +107,10 @@ autonomous cloud routine works through unchecked items in order.
 - MLPerf measures energy per stream with a power meter; browsers can't. The Battery Status API (Chrome/Android — absent on iOS Safari and Firefox) reports the battery level, so the suite samples it at **start and end** and reports **battery percentage points per 1,000 generated tokens** in `conditions.energy` (`src/lib/benchmark/energy.ts`, pure and tested).
 - The figure is **valid only** when: the API is present, the device was **not charging** at either sample, the level didn't rise, tokens were generated, and the drop exceeds the API's ~1 % reporting resolution. Otherwise `valid:false` with the reason — never a fabricated or zero energy figure.
 - It's a proxy, not a measurement: it includes screen and background load, and only decode tokens are normalised (prefill energy is folded in). Compare only within the same device class and round.
+
+## 10. Reproducibility audit (implemented in 5.5)
+
+- MLPerf audits submissions and demotes results that don't hold up. At community scale the audit is statistical and deterministic: within a round, once a device × model × engine × division has **≥ 5 certified runs**, any certified run scoring **> 2× that device's median** is treated as `valid` — still listed, never ranked.
+- Implemented as the Postgres view `benchmark_audit` (`flagged`, `effective_tier`, `device_median`, `device_runs`) over the shared `benchmark_device_key()` function; the leaderboard view excludes flagged rows. Computed at read time, so it self-heals as runs accumulate — no job, no mutation of submitted rows.
+- Only implausibly **high** scores are demoted: low scores are usually real (throttling, background load) and already explained by `conditions`; a high outlier can only be a measurement or reporting fault, and it is the one that would corrupt a ranking.
+- Mirror + tests: `src/lib/benchmark/audit.ts`; a parity test asserts the SQL carries the same thresholds. The feed shows an "⚠ outlier" badge (best effort — a missing view never breaks the feed).
