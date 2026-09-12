@@ -95,6 +95,7 @@ const METHODOLOGY = {
     overall_score: "Geometric mean of the per-category MEDIAN tok/s across the five base categories.",
     latency_class: "interactive (TTFT p90 <= 500ms & TPOT p50 <= 30ms) | conversational (<= 2000ms & <= 100ms) | batch.",
     prefill_tps_est: "Estimated prompt tokens (chars/4) / TTFT seconds; reported per category (long_context, long_context_4k). Prompts exceeding the engine's context window are skipped, not failed.",
+    energy_proxy: "conditions.energy: battery percentage points per 1,000 generated tokens from the Battery Status API level drop across the suite (MLPerf energy-per-stream proxy). Valid only on battery for the whole run and when the drop exceeds the 1% reporting resolution; otherwise valid:false with a reason.",
     verdict: "On overall_score: 'Yes, you can AI!' >= 15, 'Mostly, yes' >= 6, 'Barely…' >= 1, else 'No, not yet'.",
   },
   tiers: {

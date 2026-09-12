@@ -24,7 +24,7 @@ The implementation of everything below is `src/lib/benchmark/spec.ts`
 | Overall score | Per-category scores combined (MLPerf Client) | **Geometric mean** of base-category median tok/s (scale-robust, outlier-resistant) |
 | LoadGen validity | Minimum query counts, sanity checks, audit | `validateRun`: ≥ 3 valid runs per base category, per-sample sanity (finite, TTFT ≤ total, ≥ 4 tokens), throttling detection → `result_tier` |
 | System description | Submitter, software, system, processor, accelerator, code | Device model / GPU / RAM / cores / OS / browser + `engine`, `model_id`, `spec_version`, run `conditions` |
-| Test conditions (Mobile principle #4) | Ambient temperature, battery | `conditions`: battery charging/level, tab visibility, network type, suite duration; `thermal_decay` ratio flags throttling |
+| Test conditions (Mobile principle #4) | Ambient temperature, battery; energy per stream via power meter | `conditions`: battery level/charging at start and end, tab visibility, network type, suite duration; `thermal_decay` flags throttling; **energy proxy** = battery % per 1k generated tokens (§9) |
 | Versioned rounds | v0.7 … v6.0; results comparable within a version; release notes | `spec_version` + fingerprint-pinned `ROUND_REGISTRY` (a test fails if round inputs change without a new round); [changelog](./METHODOLOGY_CHANGELOG.md); feed and leaderboard filter by round |
 | Public results explorer | Filterable table, expandable columns | Community feed shows division, tier, score, latency class; per-model leaderboards (roadmap §5) |
 
@@ -75,7 +75,7 @@ autonomous cloud routine works through unchecked items in order.
 - [x] **5.1 Per-device leaderboards** — aggregate certified runs by (spec_version, division, model_id, device fingerprint): median-of-N submissions with N shown as confidence. MLPerf has one number per vendor system; we show the distribution across thousands of real units. (Postgres view + `Leaderboard` component with React Query, error/empty states, tests.)
 - [x] **5.2 Reference-model rounds** — bump `spec_version` when reference presets or prompts change; `docs/METHODOLOGY_CHANGELOG.md` like MLPerf release notes; feed filter by round.
 - [x] **5.3 4K-context prompt** (MLPerf Client mandates 4K prompt lengths) as an extended category, with a prefill-throughput metric (prompt tokens/s).
-- [ ] **5.4 Energy proxy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery % per 1k tokens" (conditions already capture battery level).
+- [x] **5.4 Energy proxy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery % per 1k tokens" (conditions already capture battery level).
 - [ ] **5.5 Reproducibility audit** — flag certified results whose device model has ≥ 5 runs and whose score is > 2× the device median (outlier demotion to `valid`).
 - [ ] **5.6 Structured-output and code tasks** (MLPerf Client base categories) as scored base prompts once the eval judge can gate them.
 - [x] **5.7 MCP parity for leaderboards** — `get_leaderboard` tool so external agents can query the same aggregates.
@@ -101,3 +101,9 @@ autonomous cloud routine works through unchecked items in order.
 - Engines declare `maxContextTokens` (MediaPipe 2048 — its `maxTokens` load option; WebLLM 4096; ONNX 2048 conservative). A prompt whose estimated tokens + 256 output headroom exceed it is **skipped** (shown as "skipped — needs ~N tokens…") rather than counted as a failure. Extended prompts never affect the score, validity, or the round fingerprint (base-tier prompts only).
 - Consequence today: the 4K prompt runs on WebLLM; MediaPipe/ONNX skip it until their context is raised (raising MediaPipe `maxTokens` to 4096 grows the KV cache — a product/memory decision, so left as-is).
 - MediaPipe's `generateFull` watchdog now scales with prompt length (prefill emits no partial tokens), so long prompts don't time out unnecessarily.
+
+## 9. Energy proxy (implemented in 5.4)
+
+- MLPerf measures energy per stream with a power meter; browsers can't. The Battery Status API (Chrome/Android — absent on iOS Safari and Firefox) reports the battery level, so the suite samples it at **start and end** and reports **battery percentage points per 1,000 generated tokens** in `conditions.energy` (`src/lib/benchmark/energy.ts`, pure and tested).
+- The figure is **valid only** when: the API is present, the device was **not charging** at either sample, the level didn't rise, tokens were generated, and the drop exceeds the API's ~1 % reporting resolution. Otherwise `valid:false` with the reason — never a fabricated or zero energy figure.
+- It's a proxy, not a measurement: it includes screen and background load, and only decode tokens are normalised (prefill energy is folded in). Compare only within the same device class and round.

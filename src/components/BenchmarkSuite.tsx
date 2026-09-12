@@ -19,7 +19,8 @@ import {
   type ResultTier,
   type RunStats,
 } from "@/lib/benchmark/spec";
-import { captureRunConditions, type RunConditions } from "@/lib/benchmark/conditions";
+import { captureRunConditions, sampleBattery, type RunConditions } from "@/lib/benchmark/conditions";
+import { formatEnergyProxy } from "@/lib/benchmark/energy";
 import { EVAL_PROMPTS, computeScore, scoreResponse } from "@/lib/evals";
 import { asJson, isSchemaMismatch, stripMethodologyColumns } from "@/lib/supabaseCompat";
 
@@ -145,6 +146,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const [resultTier, setResultTier] = useState<ResultTier | null>(null);
   const [qualityIdx, setQualityIdx] = useState(-1);
   const [skipped, setSkipped] = useState<Record<number, string>>({});
+  const [conditions, setConditions] = useState<RunConditions | null>(null);
   const autoSubmittedRef = useRef(false);
   // Run conditions: MLPerf Mobile's "test conditions" principle — record
   // whether the tab was backgrounded (browsers throttle hidden tabs).
@@ -171,6 +173,8 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
     (async () => {
       try {
+        // Energy proxy: battery level before any inference (see energy.ts).
+        const batteryStart = await sampleBattery();
         const allRuns: Map<number, BenchmarkResult[]> = new Map();
         const skips: Record<number, string> = {};
         let attemptedRuns = 0;
@@ -302,7 +306,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
         const conditions = await captureRunConditions({
           pageHiddenDuringRun: hiddenDuringRunRef.current,
           suiteDurationMs: performance.now() - suiteStart,
+          batteryStart,
+          totalTokens: agg.flatMap((a) => a.runs).reduce((n, r) => n + r.tokensGenerated, 0),
         });
+        setConditions(conditions);
 
         // Detect device, then auto-submit immediately so no result is lost.
         // Users can refine device/GPU/RAM afterwards via the "Edit details" button.
@@ -365,6 +372,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     setResultTier(null);
     setQualityIdx(-1);
     setSkipped({});
+    setConditions(null);
     autoSubmittedRef.current = false;
   };
 
@@ -534,6 +542,11 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
               )}
               {stats.thermal_decay < 0.7 && (
                 <span className="rounded-md border border-orange-400/30 bg-orange-400/10 px-2 py-0.5 text-orange-400">throttled</span>
+              )}
+              {formatEnergyProxy(conditions?.energy) && (
+                <span className="rounded-md border border-border bg-secondary/40 px-2 py-0.5 text-muted-foreground" title="Battery Status API level drop across the suite — a proxy, valid only on battery">
+                  {formatEnergyProxy(conditions?.energy)}
+                </span>
               )}
             </div>
           )}
