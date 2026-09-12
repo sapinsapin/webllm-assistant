@@ -13,6 +13,8 @@ import { BENCHMARK_PROMPTS } from "@/lib/models";
 import { CommunityBenchmarks } from "@/components/CommunityBenchmarks";
 import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
 import { FrugalFlops } from "@/components/FrugalFlops";
+import { WaitlistSignup } from "@/components/WaitlistSignup";
+import { Button } from "@/components/ui/button";
 
 type Phase = "idle" | "downloading" | "ready_to_bench" | "benchmarking" | "done";
 
@@ -58,8 +60,6 @@ interface QuickStartProps {
   capabilities: EngineCapability[];
   onLoadModel: (url: string, name?: string, hfToken?: string, engine?: EngineType, vision?: boolean) => void;
   onAdvancedMode: () => void;
-  onCloudChat?: () => void;
-  onC2CChat?: () => void;
   onRunBenchmark: (prompt: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunLongContext?: (prompt: string, context: string, category?: string) => Promise<BenchmarkResult | null>;
   onRunMultiTurn?: (turns: string[], category?: string) => Promise<BenchmarkResult | null>;
@@ -100,8 +100,6 @@ export function QuickStart({
   capabilities,
   onLoadModel,
   onAdvancedMode,
-  onCloudChat,
-  onC2CChat,
   onRunBenchmark,
   onRunLongContext,
   onRunMultiTurn,
@@ -496,13 +494,15 @@ export function QuickStart({
           >
             💬 Skip to Chat
           </button>
-          <button
+          <Button
             onClick={onAdvancedMode}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            variant="outline"
+            size="lg"
+            className="h-12 border-primary/60 bg-primary/10 px-6 font-mono text-base font-semibold text-primary shadow-[0_0_18px_hsl(var(--primary)/0.12)] hover:bg-primary/20 hover:text-primary"
           >
-            <Settings2 className="h-3 w-3" />
+            <Settings2 className="h-5 w-5" />
             Try other models
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -511,6 +511,9 @@ export function QuickStart({
   // --- IDLE / DOWNLOADING / BENCHMARKING SCREEN ---
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6 select-none">
+      {/* Waitlist signup */}
+      <WaitlistSignup />
+
       {/* Logo + Gemma 4 toggle */}
       <div className="text-center space-y-3">
         <h1 className="text-4xl font-bold tracking-tight font-mono">
@@ -807,30 +810,16 @@ export function QuickStart({
 
       {/* Bottom links */}
       {!isActive && (
-        <div className="flex items-center gap-3">
-          {onCloudChat && (
-            <button
-              onClick={onCloudChat}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
-            >
-              ☁️ Cloud Chat
-            </button>
-          )}
-          {onC2CChat && (
-            <button
-              onClick={onC2CChat}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
-            >
-              🔄 C2C Mode
-            </button>
-          )}
-          <button
+        <div className="flex items-center justify-center">
+          <Button
             onClick={onAdvancedMode}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors font-mono"
+            variant="outline"
+            size="lg"
+            className="h-12 border-primary/60 bg-primary/10 px-7 font-mono text-base font-semibold text-primary shadow-[0_0_18px_hsl(var(--primary)/0.12)] hover:bg-primary/20 hover:text-primary"
           >
-            <Settings2 className="h-3 w-3" />
+            <Settings2 className="h-5 w-5" />
             Try other models
-          </button>
+          </Button>
         </div>
       )}
 

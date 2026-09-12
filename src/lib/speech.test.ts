@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { ASR_MODELS, TTS_MODELS, speechVerdict } from "./speech";
+
+describe("speech model presets", () => {
+  it("defaults to the converted Philippine-language ONNX exports (first entry is the UI default)", () => {
+    expect(ASR_MODELS[0].repo).toBe("internetoftim/whisper-small-pld-fil-ONNX");
+    expect(TTS_MODELS[0].repo).toBe("internetoftim/speecht5_tts-pld-fil-ONNX");
+  });
+
+  it("pins the Filipino Whisper default to WASM with a forced language", () => {
+    // The repo ships only fp32 + q8 ONNX variants; the WebGPU path would
+    // request a nonexistent q4 decoder and fail to load.
+    expect(ASR_MODELS[0].wasmOnly).toBe(true);
+    expect(ASR_MODELS[0].language).toBe("tl");
+  });
+
+
+  it("keeps tasks consistent per list", () => {
+    for (const m of ASR_MODELS) expect(m.task).toBe("asr");
+    for (const m of TTS_MODELS) expect(m.task).toBe("tts");
+  });
+
+  it("has unique preset ids", () => {
+    const ids = [...ASR_MODELS, ...TTS_MODELS].map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("gives SpeechT5 presets a speaker embedding", () => {
+    for (const m of TTS_MODELS.filter((m) => m.id.startsWith("speecht5"))) {
+      expect(m.speakerEmbeddings).toBeTruthy();
+    }
+  });
+});
+
+describe("speechVerdict", () => {
+  it("rates real-time factor bands", () => {
+    expect(speechVerdict(0.2).label).toBe("Great");
+    expect(speechVerdict(0.8).label).toBe("Realtime capable");
+    expect(speechVerdict(2).label).toBe("Slow");
+    expect(speechVerdict(5).label).toBe("Not viable");
+  });
+});

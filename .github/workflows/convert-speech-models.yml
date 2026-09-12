@@ -1,0 +1,105 @@
+# Converts the sapinsapin ASR/TTS fine-tunes to ONNX (Transformers.js layout,
+# with fp16/q8/int8/uint8/q4/bnb4 quantized variants) and uploads them to the
+# Hugging Face Hub as <source>-ONNX repos.
+#
+# Runs on GitHub runners because model download/upload needs open network
+# access. Requires an `HF_TOKEN` repository secret: a Hugging Face WRITE token
+# authorized for the target owner (sapinsapin).
+name: Convert speech models to ONNX
+
+on:
+  workflow_dispatch:
+    inputs:
+      asr_model:
+        description: "Source ASR model (PyTorch Hub repo id)"
+        default: "sapinsapin/whisper-small-fsc"
+        type: string
+      tts_model:
+        description: "Source TTS model (PyTorch Hub repo id)"
+        default: "sapinsapin/speecht5_tts-fsc"
+        type: string
+      target_owner:
+        description: "Hub owner/org for the converted -ONNX repos"
+        default: "sapinsapin"
+        type: string
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: ${{ inputs.asr_model }}
+            task: auto # whisper → automatic-speech-recognition (+past), inferred
+            pipeline_tag: automatic-speech-recognition
+          - source: ${{ inputs.tts_model }}
+            task: text-to-audio # speecht5 export bundles the HiFiGAN vocoder
+            pipeline_tag: text-to-speech
+    steps:
+      - uses: actions/checkout@v4
+
+      # The conversion script lives on the v3 branch of transformers.js.
+      - uses: actions/checkout@v4
+        with:
+          repository: huggingface/transformers.js
+          ref: v3
+          path: transformers-js
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: transformers-js/scripts/requirements.txt
+
+      - name: Install conversion dependencies
+        # The pinned requirements pull onnx_graphsurgeon==0.3.27 from NVIDIA's
+        # pypi.ngc.nvidia.com index, which no longer resolves — and that version
+        # was never published to PyPI. Drop the dead index and let pip take the
+        # PyPI release of onnx_graphsurgeon instead.
+        run: |
+          sed -i '/pypi\.ngc\.nvidia\.com/d' transformers-js/scripts/requirements.txt
+          sed -i 's/^onnx_graphsurgeon==.*/onnx_graphsurgeon/' transformers-js/scripts/requirements.txt
+          # The requirements leave torch unpinned; current torch (>=2.9) routes
+          # torch.onnx.export through the dynamo exporter, which needs
+          # onnxscript and changes export semantics optimum 1.21 relies on.
+          # Pin the period-correct torch (legacy exporter built in), CPU build.
+          pip install "torch==2.4.1" --index-url https://download.pytorch.org/whl/cpu
+          pip install -r transformers-js/scripts/requirements.txt
+          pip install "huggingface_hub>=0.24"
+          # The sapinsapin fine-tunes were saved with tokenizers >=0.20 (new
+          # tokenizer.json merges format); the pinned tokenizers 0.19.1 fails
+          # to parse it ("did not match any variant of untagged enum
+          # ModelWrapper"). 0.20.x keeps the same Python API, so install it
+          # without letting pip downgrade the rest of the stack.
+          pip install --no-deps "tokenizers>=0.20.3,<0.21"
+          # transformers 4.43.4 hard-rejects tokenizers 0.20 at import time via
+          # its dependency_versions_table; widen the declared ceiling in place.
+          # Locate the file WITHOUT importing transformers (importing it raises
+          # the very ImportError being patched).
+          python - <<'EOF'
+          import importlib.util, pathlib
+          pkg = pathlib.Path(importlib.util.find_spec("transformers").origin).parent
+          table = pkg / "dependency_versions_table.py"
+          table.write_text(table.read_text().replace("tokenizers>=0.19,<0.20", "tokenizers>=0.19,<0.21"))
+          print(f"patched {table}")
+          EOF
+
+      - name: Convert to ONNX (+ quantized variants)
+        working-directory: transformers-js
+        run: |
+          python -m scripts.convert \
+            --quantize \
+            --model_id "${{ matrix.source }}" \
+            --task "${{ matrix.task }}"
+
+      - name: Upload to the Hugging Face Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          SOURCE="${{ matrix.source }}"
+          python scripts/upload_speech_onnx.py \
+            --converted "transformers-js/models/${SOURCE}" \
+            --source "${SOURCE}" \
+            --target "${{ inputs.target_owner }}/$(basename "${SOURCE}")-ONNX" \
+            --pipeline-tag "${{ matrix.pipeline_tag }}"

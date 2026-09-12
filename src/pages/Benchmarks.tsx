@@ -13,6 +13,7 @@ import { useLlmInference } from "@/hooks/useLlmInference";
 import { BenchmarkHeatmap } from "@/components/BenchmarkHeatmap";
 import { Leaderboard } from "@/components/Leaderboard";
 import { FrugalFlops } from "@/components/FrugalFlops";
+import { SpeechBench } from "@/components/SpeechBench";
 
 interface PerPromptResult {
   prompt: string;
@@ -294,6 +295,9 @@ export default function Benchmarks() {
 
           {/* Per-device leaderboard (methodology 2026.09, certified runs) */}
           <Leaderboard />
+
+          {/* Speech (ASR / TTS) benchmarks */}
+          <SpeechBench />
 
           {/* Geographic Heatmap */}
           <BenchmarkHeatmap />
