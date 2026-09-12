@@ -71,6 +71,7 @@ const METHODOLOGY = {
     quality_gate: "Mean keyword-eval score >= 0.5 on the 6-prompt smoke set is required for result_tier 'certified'.",
     result_tiers: ["certified", "valid", "invalid", "reported"],
   },
+  leaderboard: "get_leaderboard: median-of-N certified runs per (device, model, engine) within a round; runs = N is the confidence.",
   runs_per_prompt: 3,
   categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "multi_turn", "concurrent"],
 };
@@ -222,6 +223,41 @@ mcp.tool({
       return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
     }
     return { content: [{ type: "text", text: JSON.stringify({ count: data?.length ?? 0, rows: data }, null, 2) }] };
+  },
+});
+
+mcp.tool({
+  name: "get_leaderboard",
+  description:
+    "Per-device leaderboard for the current methodology round: median overall_score of CERTIFIED runs grouped by device, model and engine (view benchmark_leaderboard). Defaults to the closed division (reference model per engine).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      division: { type: "string", description: "closed | open (default closed)" },
+      engine: { type: "string", description: "mediapipe | webllm | onnx" },
+      model_id: { type: "string", description: "Preset id, e.g. webllm-llama-1b" },
+      limit: { type: "number", description: "Max rows (1-100)", default: 25 },
+    },
+  },
+  handler: async (args: { division?: string; engine?: string; model_id?: string; limit?: number }) => {
+    const limit = Math.min(Math.max(args?.limit ?? 25, 1), 100);
+    const division = args?.division === "open" ? "open" : "closed";
+    let q = supabase
+      .from("benchmark_leaderboard")
+      .select("device_key, device_type, model_id, model_name, engine, runs, score_p50, score_p25, score_p75, ttft_p90_p50_ms, last_run_at")
+      .eq("spec_version", METHODOLOGY_VERSION)
+      .eq("division", division)
+      .order("score_p50", { ascending: false })
+      .limit(limit);
+    if (args?.engine) q = q.eq("engine", args.engine);
+    if (args?.model_id) q = q.eq("model_id", args.model_id);
+    const { data, error } = await q;
+    if (error) {
+      return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify({ spec_version: METHODOLOGY_VERSION, division, count: data?.length ?? 0, rows: data }, null, 2) }],
+    };
   },
 });
 

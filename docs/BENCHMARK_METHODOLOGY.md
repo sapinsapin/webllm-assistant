@@ -72,10 +72,18 @@ Every row carries: `spec_version`, `division`, `model_id`, `overall_score`, `ttf
 Status is tracked here (checked items are merged on the working branch). An
 autonomous cloud routine works through unchecked items in order.
 
-- [ ] **5.1 Per-device leaderboards** — aggregate certified runs by (spec_version, division, model_id, device fingerprint): median-of-N submissions with N shown as confidence. MLPerf has one number per vendor system; we show the distribution across thousands of real units. (Postgres view + `Leaderboard` component with React Query, error/empty states, tests.)
+- [x] **5.1 Per-device leaderboards** — aggregate certified runs by (spec_version, division, model_id, device fingerprint): median-of-N submissions with N shown as confidence. MLPerf has one number per vendor system; we show the distribution across thousands of real units. (Postgres view + `Leaderboard` component with React Query, error/empty states, tests.)
 - [ ] **5.2 Reference-model rounds** — bump `spec_version` when reference presets or prompts change; `docs/METHODOLOGY_CHANGELOG.md` like MLPerf release notes; feed filter by round.
 - [ ] **5.3 4K-context prompt** (MLPerf Client mandates 4K prompt lengths) as an extended category, with a prefill-throughput metric (prompt tokens/s).
 - [ ] **5.4 Energy proxy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery % per 1k tokens" (conditions already capture battery level).
 - [ ] **5.5 Reproducibility audit** — flag certified results whose device model has ≥ 5 runs and whose score is > 2× the device median (outlier demotion to `valid`).
 - [ ] **5.6 Structured-output and code tasks** (MLPerf Client base categories) as scored base prompts once the eval judge can gate them.
-- [ ] **5.7 MCP parity for leaderboards** — `get_leaderboard` tool so external agents can query the same aggregates.
+- [x] **5.7 MCP parity for leaderboards** — `get_leaderboard` tool so external agents can query the same aggregates.
+
+## 6. Leaderboards (implemented in 5.1 / 5.7)
+
+- Postgres view `benchmark_leaderboard` (`security_invoker`, public SELECT) aggregates **certified** runs only, grouped by `(spec_version, division, model_id, engine, device_key)` where `device_key = device_model ?? "os · gpu" ?? "Unknown device"`.
+- Per group: `runs` (N), `score_p50/p25/p75` (median and quartiles of `overall_score`), `ttft_p90_p50_ms` (median of per-run TTFT p90), `last_run_at`.
+- The `Leaderboard` component (Benchmarks page) shows the current round, closed division by default, ranked by median score with ties broken by N; confidence = high (N ≥ 5), medium (2–4), single run; the ± figure is half the interquartile range as a share of the median.
+- External agents get the same aggregates via the MCP tool `get_leaderboard`.
+- Legacy, unranked (`valid`), `invalid`, and agent-`reported` rows never enter the leaderboard.

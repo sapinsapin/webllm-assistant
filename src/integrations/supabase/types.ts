@@ -157,7 +157,25 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      benchmark_leaderboard: {
+        Row: {
+          spec_version: string | null
+          division: string | null
+          model_id: string | null
+          engine: string | null
+          device_key: string | null
+          device_type: string | null
+          model_name: string | null
+          gpu: string | null
+          runs: number | null
+          score_p50: number | null
+          score_p25: number | null
+          score_p75: number | null
+          ttft_p90_p50_ms: number | null
+          last_run_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
