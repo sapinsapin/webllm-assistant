@@ -68,9 +68,14 @@ On `overall_score`: **≥ 15** "Yes, you can AI!", **≥ 6** "Mostly, yes", **�
 Every row carries: `spec_version`, `division`, `model_id`, `overall_score`, `ttft_p90_ms`, `tpot_p50_ms`, `latency_class`, `quality_score`, `result_tier`, `validity {valid, reasons[]}`, `stats` (per-category), `conditions`, raw per-run `results`, plus the device description. Legacy rows (pre-2026.09) have NULL methodology columns and fall back to `avg_tps` / `verdict` in the UI.
 
 ## 5. Roadmap to authority (beyond MLPerf)
-1. **Per-device leaderboards** — aggregate certified runs by (spec_version, division, model_id, device fingerprint): median-of-N submissions, with N shown as confidence. MLPerf has one number per vendor system; we can show the distribution across thousands of real units.
-2. **Reference-model rounds** — bump `spec_version` when reference presets or prompts change; publish a changelog like MLPerf release notes.
-3. **4K-context prompt** (MLPerf Client mandates 4K prompt lengths) as an extended category.
-4. **Energy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery per 1k tokens" proxy.
-5. **Reproducibility audit** — random re-run requests of certified results on the same device model; drift beyond tolerance demotes the tier.
-6. **Structured-output and code tasks** (MLPerf Client base categories) as scored base prompts once the eval judge can gate them.
+
+Status is tracked here (checked items are merged on the working branch). An
+autonomous cloud routine works through unchecked items in order.
+
+- [ ] **5.1 Per-device leaderboards** — aggregate certified runs by (spec_version, division, model_id, device fingerprint): median-of-N submissions with N shown as confidence. MLPerf has one number per vendor system; we show the distribution across thousands of real units. (Postgres view + `Leaderboard` component with React Query, error/empty states, tests.)
+- [ ] **5.2 Reference-model rounds** — bump `spec_version` when reference presets or prompts change; `docs/METHODOLOGY_CHANGELOG.md` like MLPerf release notes; feed filter by round.
+- [ ] **5.3 4K-context prompt** (MLPerf Client mandates 4K prompt lengths) as an extended category, with a prefill-throughput metric (prompt tokens/s).
+- [ ] **5.4 Energy proxy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery % per 1k tokens" (conditions already capture battery level).
+- [ ] **5.5 Reproducibility audit** — flag certified results whose device model has ≥ 5 runs and whose score is > 2× the device median (outlier demotion to `valid`).
+- [ ] **5.6 Structured-output and code tasks** (MLPerf Client base categories) as scored base prompts once the eval judge can gate them.
+- [ ] **5.7 MCP parity for leaderboards** — `get_leaderboard` tool so external agents can query the same aggregates.
