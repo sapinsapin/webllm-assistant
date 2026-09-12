@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PRESET_MODELS, getModelsForEngine, getSmallestModel, getBestQuickStartModel, getGemma4Model } from "./models";
+import { PRESET_MODELS, BENCHMARK_PROMPTS, LONG_CONTEXT_4K_PASSAGE, buildLongContext4k, getModelsForEngine, getSmallestModel, getBestQuickStartModel, getGemma4Model } from "./models";
 
 describe("PRESET_MODELS", () => {
   it("has unique ids", () => {
@@ -89,5 +89,26 @@ describe("getGemma4Model", () => {
       ])
     ).toBeNull();
     expect(getGemma4Model([])).toBeNull();
+  });
+});
+
+describe("4K-context prompt (MLPerf Client 4K prompt class)", () => {
+  const p4k = BENCHMARK_PROMPTS.find((p) => p.category === "long_context_4k")!;
+
+  it("exists as a single-run extended prompt with a ~4K-token context", () => {
+    expect(p4k).toBeDefined();
+    expect(p4k.runs).toBe(1);
+    expect(p4k.context).toBe(LONG_CONTEXT_4K_PASSAGE);
+    expect(LONG_CONTEXT_4K_PASSAGE.length).toBeGreaterThanOrEqual(16_000);
+    expect(LONG_CONTEXT_4K_PASSAGE.length).toBeLessThan(17_000);
+  });
+
+  it("is deterministic — identical on every device and run", () => {
+    expect(buildLongContext4k()).toBe(LONG_CONTEXT_4K_PASSAGE);
+  });
+
+  it("the QA question is answerable from the passage (Section 7 → LSM trees / memtable)", () => {
+    expect(LONG_CONTEXT_4K_PASSAGE).toContain("Section 7: storage. The recommended technique in this section is log-structured merge trees");
+    expect(LONG_CONTEXT_4K_PASSAGE).toContain("memtable");
   });
 });

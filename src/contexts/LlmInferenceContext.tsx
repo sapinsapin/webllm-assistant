@@ -30,6 +30,8 @@ export interface BenchmarkResult {
   ttftMs: number;
   tpotMs: number;
   response: string;
+  /** Full prompt length in chars (for the prefill-throughput estimate). */
+  promptChars?: number;
 }
 
 interface LlmInferenceContextValue {
@@ -270,6 +272,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           ttftMs: result.ttftMs,
           tpotMs: result.tpotMs,
           response: result.response,
+          promptChars: fullPrompt.length,
         };
       } catch (err) {
         console.error("Benchmark error:", err);
@@ -304,6 +307,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           ttftMs: result.ttftMs,
           tpotMs: result.tpotMs,
           response: result.response,
+          promptChars: fullPrompt.length,
         };
       } catch (err) {
         console.error("Long context benchmark error:", err);
@@ -330,10 +334,12 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
         let firstTtft = 0;
         const tpots: number[] = [];
         let lastResponse = "";
+        let promptChars = 0;
 
         for (let i = 0; i < turns.length; i++) {
           conversation.push({ role: "user", content: turns[i] });
           const fullPrompt = engine.formatPrompt(conversation);
+          promptChars += fullPrompt.length;
           const result = await engine.generateFull(fullPrompt);
 
           conversation.push({ role: "assistant", content: result.response });
@@ -356,6 +362,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           ttftMs: firstTtft,
           tpotMs: avgTpot,
           response: lastResponse,
+          promptChars,
         };
       } catch (err) {
         console.error("Multi-turn benchmark error:", err);
@@ -437,6 +444,7 @@ export function LlmInferenceProvider({ children }: { children: React.ReactNode }
           response: isTimeout
             ? `Timed out: ${fulfilled.length}/${concurrency} completed in ${Math.round(wallTimeMs / 1000)}s`
             : `${fulfilled.length}/${concurrency} completed`,
+          promptChars: fullPrompt.length,
         };
       } catch (err) {
         console.error("Concurrent benchmark error:", err);

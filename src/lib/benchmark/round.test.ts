@@ -64,6 +64,14 @@ describe("fingerprinting", () => {
     expect(fingerprintOf(mutated)).not.toBe(fingerprintOf(inputs));
   });
 
+  it("extended-tier prompts are excluded: changing one does not change the round fingerprint", () => {
+    // The 4K-context prompt is extended (reported, never scored), so it is
+    // not among the fingerprinted inputs at all.
+    const inputs = currentRoundInputs();
+    expect(inputs.prompts.some((p) => p.category === "long_context_4k")).toBe(false);
+    expect(inputs.prompts.every((p) => ["ttft", "short", "medium", "long", "reasoning"].includes(p.category))).toBe(true);
+  });
+
   it("changing a threshold or reference preset changes the round fingerprint", () => {
     const inputs = currentRoundInputs();
     expect(fingerprintOf({ ...inputs, thresholds: { ...inputs.thresholds, QUALITY_GATE: 0.6 } })).not.toBe(fingerprintOf(inputs));

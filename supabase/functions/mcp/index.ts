@@ -22,6 +22,42 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const LONG_CONTEXT_PASSAGE =
   "The following is a detailed technical document about distributed systems architecture. Distributed systems are collections of independent computers that appear to users as a single coherent system. They share state and coordinate actions through message passing. Key challenges include: (1) Network partitions - when nodes cannot communicate, the system must decide between consistency and availability per the CAP theorem. (2) Consensus - algorithms like Paxos and Raft ensure nodes agree on shared state despite failures. (3) Replication - data is copied across nodes for fault tolerance. (4) Consistency models range from strong (linearizability) to weak (eventual consistency). (5) Clock synchronization uses logical clocks like Lamport and vector clocks. (6) Failure detection uses heartbeats and phi-accrual detectors. (7) Sharding partitions data across nodes. (8) Load balancing distributes requests. (9) Service discovery enables nodes to find each other. (10) Observability via tracing, metrics, and structured logging is essential.";
 
+// Mirror of models.ts buildLongContext4k() — deterministic ~4K-token manual.
+function buildLongContext4k(): string {
+  const topics = [
+    ["consensus", "Raft", "leader election with randomized timeouts of 150 to 300 milliseconds"],
+    ["replication", "chain replication", "writes flow head to tail and reads are served by the tail"],
+    ["partitioning", "consistent hashing", "virtual nodes spread load with 128 tokens per physical node"],
+    ["caching", "write-through caching", "every write updates the cache and the store before acknowledging"],
+    ["messaging", "at-least-once delivery", "consumers must be idempotent because duplicates can occur"],
+    ["scheduling", "work stealing", "idle workers pull tasks from the tail of a busy worker's deque"],
+    ["storage", "log-structured merge trees", "writes append to a memtable that is flushed into sorted runs"],
+    ["observability", "distributed tracing", "each span records a parent identifier and a monotonic clock"],
+    ["security", "mutual TLS", "both peers present certificates issued by the cluster authority"],
+    ["networking", "gossip protocols", "each node contacts three random peers every 200 milliseconds"],
+    ["time", "hybrid logical clocks", "a physical timestamp is paired with a logical counter"],
+    ["failure", "phi accrual detection", "suspicion grows continuously with the inter-arrival distribution"],
+  ];
+  const sections: string[] = [];
+  for (let i = 0; i < topics.length; i++) {
+    const [area, name, fact] = topics[i];
+    sections.push([
+      `Section ${i + 1}: ${area}. The recommended technique in this section is ${name}; ${fact}.`,
+      `Operators adopting ${name} should document the failure modes, rehearse recovery, and record the observed latency distribution for every deployment tier.`,
+      `Capacity planning for ${area} assumes steady growth, so the team reviews utilisation weekly and adjusts limits before saturation rather than after incidents.`,
+      `A common mistake with ${name} is tuning parameters on a quiet cluster; production traffic has bursts, so validation must include synthetic load at three times the median.`,
+      `Runbooks for ${area} list the dashboards to open, the alerts that fire first, the safe mitigations, and who is paged when the mitigation does not restore service.`,
+      `Finally, ${name} interacts with the other sections: changes here can shift load onto neighbouring subsystems, which is why rollouts proceed one region at a time.`,
+    ].join(" "));
+  }
+  let text = `This document is a distributed systems operations manual with ${topics.length} sections.\n\n` + sections.join("\n\n");
+  const appendix =
+    " Appendix note: all figures in this manual are illustrative, measured on a reference cluster of twelve nodes, and should be re-validated before being used as service level objectives.";
+  while (text.length < 16_000) text += appendix;
+  return text;
+}
+const LONG_CONTEXT_4K_PASSAGE = buildLongContext4k();
+
 const BENCHMARK_PROMPTS = [
   { label: "Single word", prompt: "What is 2+2? Reply with just the number.", category: "ttft" },
   { label: "Yes/No", prompt: "Is the sky blue? Answer only yes or no.", category: "ttft" },
@@ -35,6 +71,7 @@ const BENCHMARK_PROMPTS = [
   { label: "Logic", prompt: "There are 5 houses in a row. The red house is to the left of the blue house. The green house is between the red and yellow houses. The white house is at the far right. What is the order of houses from left to right? Think step by step.", category: "reasoning" },
   { label: "Context QA", prompt: "Based on the document above, what are the two main consensus algorithms mentioned and why are they important?", category: "long_context", context: LONG_CONTEXT_PASSAGE },
   { label: "Context Summary", prompt: "Summarize the above document in exactly 3 bullet points.", category: "long_context", context: LONG_CONTEXT_PASSAGE },
+  { label: "4K Context QA", prompt: "Based on the manual above, which technique does Section 7 recommend, and what does it say about the memtable? Answer in one sentence.", category: "long_context_4k", context: LONG_CONTEXT_4K_PASSAGE, runs: 1 },
   { label: "3-turn chat", prompt: "What is photosynthesis?", category: "multi_turn", turns: ["What is photosynthesis?", "What are the two main stages?", "Why is it important for life on Earth?"] },
   { label: "5-turn drill", prompt: "Name a programming language.", category: "multi_turn", turns: ["Name a programming language.", "What is it mainly used for?", "Give me a simple code example.", "What are its main advantages?", "What are its main disadvantages?"] },
   { label: "2× parallel", prompt: "What is the speed of light?", category: "concurrent", concurrency: 2 },
@@ -57,11 +94,12 @@ const METHODOLOGY = {
     tpot_ms: "Time per output token in ms — inter-token decode latency. Reported as p50.",
     overall_score: "Geometric mean of the per-category MEDIAN tok/s across the five base categories.",
     latency_class: "interactive (TTFT p90 <= 500ms & TPOT p50 <= 30ms) | conversational (<= 2000ms & <= 100ms) | batch.",
+    prefill_tps_est: "Estimated prompt tokens (chars/4) / TTFT seconds; reported per category (long_context, long_context_4k). Prompts exceeding the engine's context window are skipped, not failed.",
     verdict: "On overall_score: 'Yes, you can AI!' >= 15, 'Mostly, yes' >= 6, 'Barely…' >= 1, else 'No, not yet'.",
   },
   tiers: {
     base: ["ttft", "short", "medium", "long", "reasoning"],
-    extended: ["long_context", "multi_turn", "concurrent"],
+    extended: ["long_context", "long_context_4k", "multi_turn", "concurrent"],
     note: "Only base categories contribute to overall_score; extended categories are reported.",
   },
   divisions: {
@@ -75,7 +113,7 @@ const METHODOLOGY = {
   },
   leaderboard: "get_leaderboard: median-of-N certified runs per (device, model, engine) within a round; runs = N is the confidence.",
   runs_per_prompt: 3,
-  categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "multi_turn", "concurrent"],
+  categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "long_context_4k", "multi_turn", "concurrent"],
 };
 
 const PRESET_MODELS = [
@@ -172,7 +210,7 @@ const mcp = new McpServer({
 mcp.tool({
   name: "list_benchmark_prompts",
   description:
-    "Return the full Can I AI benchmark suite (16 prompts across 8 categories). Run each prompt locally with your model and submit the result via submit_benchmark_run.",
+    "Return the full Can I AI benchmark suite (17 prompts across 9 categories; long_context_4k runs once). Run each prompt locally with your model and submit the result via submit_benchmark_run.",
   inputSchema: { type: "object", properties: {} },
   handler: async () => ({
     content: [{ type: "text", text: JSON.stringify({ prompts: BENCHMARK_PROMPTS, methodology: METHODOLOGY }, null, 2) }],

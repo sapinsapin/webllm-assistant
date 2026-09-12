@@ -40,7 +40,7 @@ export interface MethodologyRound {
 export const ROUND_REGISTRY: MethodologyRound[] = [
   {
     version: "2026.09",
-    fingerprint: "5c5aa622",
+    fingerprint: "c3b1aafa",
     opened: "2026-09-07",
     summary:
       "First MLPerf-style round: percentiles, geomean score, closed/open divisions, quality gate, latency classes, result tiers, per-device leaderboards.",
@@ -57,7 +57,9 @@ export function currentRound(): MethodologyRound {
 /** The inputs that define comparability. Anything here changing ⇒ new round. */
 export function currentRoundInputs() {
   return {
-    prompts: BENCHMARK_PROMPTS.map((p) => ({
+    // Base-tier prompts only: extended categories are reported, never scored,
+    // so adding or changing one does not alter comparability of overall_score.
+    prompts: BENCHMARK_PROMPTS.filter((p) => CATEGORY_TIER[p.category] === "base").map((p) => ({
       label: p.label,
       prompt: p.prompt,
       category: p.category,

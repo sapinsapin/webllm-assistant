@@ -50,6 +50,7 @@ export const CATEGORY_TIER: Record<BenchmarkCategory, PromptTier> = {
   long: "base",
   reasoning: "base",
   long_context: "extended",
+  long_context_4k: "extended",
   multi_turn: "extended",
   concurrent: "extended",
 };
@@ -155,6 +156,23 @@ export interface RunSample {
   tokensPerSecond: number;
   ttftMs: number;
   tpotMs: number;
+  /** Length of the full prompt sent to the engine (chars); enables the
+   * prefill-throughput estimate. Optional for legacy rows. */
+  promptChars?: number;
+}
+
+/** Engines don't expose tokenizers uniformly, so prompt tokens are estimated
+ * at ~4 chars/token (the usual English heuristic). Reported as an estimate. */
+export const CHARS_PER_TOKEN_ESTIMATE = 4;
+export function estimatePromptTokens(chars: number): number {
+  return Math.max(0, Math.round(chars / CHARS_PER_TOKEN_ESTIMATE));
+}
+
+/** Estimated prefill throughput (prompt tokens / TTFT seconds); null when the
+ * sample carries no prompt length or TTFT is zero. */
+export function prefillTps(s: Pick<RunSample, "promptChars" | "ttftMs">): number | null {
+  if (s.promptChars == null || !(s.ttftMs > 0)) return null;
+  return estimatePromptTokens(s.promptChars) / (s.ttftMs / 1000);
 }
 
 export interface CategoryStats {
@@ -166,6 +184,8 @@ export interface CategoryStats {
   ttft_p90_ms: number;
   tpot_p50_ms: number;
   tokens_mean: number;
+  /** Median estimated prefill throughput (prompt tok/s); null if unknown. */
+  prefill_tps_p50: number | null;
 }
 
 export interface Validity {
@@ -228,6 +248,10 @@ export function aggregateRun(samples: RunSample[]): RunStats {
     ttft_p90_ms: percentile(runs.map((r) => r.ttftMs), 90),
     tpot_p50_ms: median(runs.map((r) => r.tpotMs)),
     tokens_mean: runs.reduce((a, r) => a + r.tokensGenerated, 0) / runs.length,
+    prefill_tps_p50: (() => {
+      const v = runs.map(prefillTps).filter((x): x is number => x != null && Number.isFinite(x));
+      return v.length > 0 ? median(v) : null;
+    })(),
   }));
 
   // Validity: every base category present with enough runs.
