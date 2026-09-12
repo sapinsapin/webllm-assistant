@@ -40,7 +40,7 @@ export interface MethodologyRound {
 export const ROUND_REGISTRY: MethodologyRound[] = [
   {
     version: "2026.09",
-    fingerprint: "c3b1aafa",
+    fingerprint: "6b22ef64",
     opened: "2026-09-07",
     summary:
       "First MLPerf-style round: percentiles, geomean score, closed/open divisions, quality gate, latency classes, result tiers, per-device leaderboards.",
@@ -72,7 +72,9 @@ export function currentRoundInputs() {
       const e = EVAL_PROMPTS.find((x) => x.id === id);
       return { id, prompt: e?.prompt ?? null, required: e?.requiredKeywords ?? null, pattern: e?.exactPattern ?? null };
     }),
-    tiers: CATEGORY_TIER,
+    // Only which categories are BASE matters for comparability; adding an
+    // extended category must not open a new round.
+    base_categories: Object.keys(CATEGORY_TIER).filter((c) => CATEGORY_TIER[c as keyof typeof CATEGORY_TIER] === "base").sort(),
     thresholds: {
       MIN_RUNS_PER_BASE_CATEGORY,
       MIN_TOKENS_NON_TTFT,

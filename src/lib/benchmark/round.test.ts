@@ -72,6 +72,12 @@ describe("fingerprinting", () => {
     expect(inputs.prompts.every((p) => ["ttft", "short", "medium", "long", "reasoning"].includes(p.category))).toBe(true);
   });
 
+  it("adding an extended category does not change the fingerprint; changing the base set does", () => {
+    const inputs = currentRoundInputs();
+    expect(inputs.base_categories).toEqual(["long", "medium", "reasoning", "short", "ttft"]);
+    expect(fingerprintOf({ ...inputs, base_categories: [...inputs.base_categories, "code"] })).not.toBe(fingerprintOf(inputs));
+  });
+
   it("changing a threshold or reference preset changes the round fingerprint", () => {
     const inputs = currentRoundInputs();
     expect(fingerprintOf({ ...inputs, thresholds: { ...inputs.thresholds, QUALITY_GATE: 0.6 } })).not.toBe(fingerprintOf(inputs));

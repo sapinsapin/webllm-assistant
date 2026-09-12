@@ -74,6 +74,10 @@ const BENCHMARK_PROMPTS = [
   { label: "4K Context QA", prompt: "Based on the manual above, which technique does Section 7 recommend, and what does it say about the memtable? Answer in one sentence.", category: "long_context_4k", context: LONG_CONTEXT_4K_PASSAGE, runs: 1 },
   { label: "3-turn chat", prompt: "What is photosynthesis?", category: "multi_turn", turns: ["What is photosynthesis?", "What are the two main stages?", "Why is it important for life on Earth?"] },
   { label: "5-turn drill", prompt: "Name a programming language.", category: "multi_turn", turns: ["Name a programming language.", "What is it mainly used for?", "Give me a simple code example.", "What are its main advantages?", "What are its main disadvantages?"] },
+  { label: "JSON object", prompt: 'Return a JSON object describing a fictional person with exactly the keys "name", "age" and "city". Output only the JSON, nothing else.', category: "structured", check: { kind: "json", requiredKeys: ["name", "age", "city"] } },
+  { label: "JSON array", prompt: "List the three primary colors as a JSON array of strings. Output only the JSON array.", category: "structured", check: { kind: "json", arrayMinLength: 3 } },
+  { label: "Python function", prompt: "Write a Python function named is_palindrome(s) that returns True when the string s reads the same forwards and backwards. Output only the code.", category: "code", check: { kind: "regex", all: ["def\\s+is_palindrome\\s*\\(", "return"] } },
+  { label: "JavaScript function", prompt: "Write a JavaScript function named sumArray(arr) that returns the sum of the numbers in arr. Output only the code.", category: "code", check: { kind: "regex", all: ["sumArray\\s*(=|\\()", "return"] } },
   { label: "2× parallel", prompt: "What is the speed of light?", category: "concurrent", concurrency: 2 },
   { label: "4× parallel", prompt: "Define gravity in one sentence.", category: "concurrent", concurrency: 4 },
 ];
@@ -95,12 +99,13 @@ const METHODOLOGY = {
     overall_score: "Geometric mean of the per-category MEDIAN tok/s across the five base categories.",
     latency_class: "interactive (TTFT p90 <= 500ms & TPOT p50 <= 30ms) | conversational (<= 2000ms & <= 100ms) | batch.",
     prefill_tps_est: "Estimated prompt tokens (chars/4) / TTFT seconds; reported per category (long_context, long_context_4k). Prompts exceeding the engine's context window are skipped, not failed.",
+    output_check: "Prompts carrying a `check` (json: requiredKeys / arrayMinLength; regex: all patterns, case-insensitive) are accuracy-gated: a run whose output fails the check is recorded with passedCheck:false and excluded from that category's throughput; stats report check_pass_rate. Apply the same check when submitting.",
     energy_proxy: "conditions.energy: battery percentage points per 1,000 generated tokens from the Battery Status API level drop across the suite (MLPerf energy-per-stream proxy). Valid only on battery for the whole run and when the drop exceeds the 1% reporting resolution; otherwise valid:false with a reason.",
     verdict: "On overall_score: 'Yes, you can AI!' >= 15, 'Mostly, yes' >= 6, 'Barely…' >= 1, else 'No, not yet'.",
   },
   tiers: {
     base: ["ttft", "short", "medium", "long", "reasoning"],
-    extended: ["long_context", "long_context_4k", "multi_turn", "concurrent"],
+    extended: ["long_context", "long_context_4k", "multi_turn", "concurrent", "structured", "code"],
     note: "Only base categories contribute to overall_score; extended categories are reported.",
   },
   divisions: {
@@ -115,7 +120,7 @@ const METHODOLOGY = {
   },
   leaderboard: "get_leaderboard: median-of-N certified runs per (device, model, engine) within a round; runs = N is the confidence.",
   runs_per_prompt: 3,
-  categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "long_context_4k", "multi_turn", "concurrent"],
+  categories: ["ttft", "short", "medium", "long", "reasoning", "long_context", "long_context_4k", "multi_turn", "concurrent", "structured", "code"],
 };
 
 const PRESET_MODELS = [
@@ -212,7 +217,7 @@ const mcp = new McpServer({
 mcp.tool({
   name: "list_benchmark_prompts",
   description:
-    "Return the full Can I AI benchmark suite (17 prompts across 9 categories; long_context_4k runs once). Run each prompt locally with your model and submit the result via submit_benchmark_run.",
+    "Return the full Can I AI benchmark suite (21 prompts across 11 categories; long_context_4k runs once; structured/code prompts carry an output check). Run each prompt locally with your model and submit the result via submit_benchmark_run.",
   inputSchema: { type: "object", properties: {} },
   handler: async () => ({
     content: [{ type: "text", text: JSON.stringify({ prompts: BENCHMARK_PROMPTS, methodology: METHODOLOGY }, null, 2) }],

@@ -1,4 +1,5 @@
 import type { EngineType } from "./inference/types";
+import type { OutputCheck } from "./benchmark/outputCheck";
 
 export interface ModelPreset {
   id: string;
@@ -152,7 +153,7 @@ export function getGemma4Model(capabilities: { engine: EngineType; available: bo
   return PRESET_MODELS.find(m => m.id === "gemma-4-e2b") || null;
 }
 
-export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning" | "long_context" | "long_context_4k" | "multi_turn" | "concurrent";
+export type BenchmarkCategory = "ttft" | "short" | "medium" | "long" | "reasoning" | "long_context" | "long_context_4k" | "multi_turn" | "concurrent" | "structured" | "code";
 
 export interface BenchmarkPrompt {
   label: string;
@@ -168,6 +169,9 @@ export interface BenchmarkPrompt {
   /** Runs per prompt override (default RUNS_PER_PROMPT in the suite). Long
    * prefills use 1 to keep the suite's wall time bounded. */
   runs?: number;
+  /** Deterministic correctness check; a run failing it is excluded from the
+   * category's throughput stats (MLPerf accuracy-target rule). */
+  check?: OutputCheck;
 }
 
 /**
@@ -228,6 +232,8 @@ export const BENCHMARK_CATEGORIES: Record<BenchmarkCategory, { label: string; de
   long_context_4k: { label: "4K Context", description: "~4K-token input (MLPerf Client class) — prefill throughput; skipped where the engine's context window is smaller" },
   multi_turn: { label: "Multi-Turn", description: "Multi-turn conversation — measures context accumulation overhead" },
   concurrent: { label: "Concurrent", description: "Parallel requests — measures throughput under load" },
+  structured: { label: "Structured", description: "JSON output — throughput counts only when the output parses and has the required shape" },
+  code: { label: "Code", description: "Code generation — throughput counts only when the required function is produced" },
 };
 
 export const BENCHMARK_PROMPTS: BenchmarkPrompt[] = [
@@ -293,6 +299,38 @@ export const BENCHMARK_PROMPTS: BenchmarkPrompt[] = [
       "What are its main advantages?",
       "What are its main disadvantages?",
     ],
+  },
+
+  // Structured output (extended, output-checked — MLPerf Client base category)
+  {
+    label: "JSON object",
+    prompt: 'Return a JSON object describing a fictional person with exactly the keys "name", "age" and "city". Output only the JSON, nothing else.',
+    category: "structured",
+    description: "JSON object with required keys",
+    check: { kind: "json", requiredKeys: ["name", "age", "city"] },
+  },
+  {
+    label: "JSON array",
+    prompt: "List the three primary colors as a JSON array of strings. Output only the JSON array.",
+    category: "structured",
+    description: "JSON array of ≥ 3 strings",
+    check: { kind: "json", arrayMinLength: 3 },
+  },
+
+  // Code (extended, output-checked — MLPerf Client base category)
+  {
+    label: "Python function",
+    prompt: "Write a Python function named is_palindrome(s) that returns True when the string s reads the same forwards and backwards. Output only the code.",
+    category: "code",
+    description: "Must define is_palindrome and return",
+    check: { kind: "regex", all: ["def\\s+is_palindrome\\s*\\(", "return"] },
+  },
+  {
+    label: "JavaScript function",
+    prompt: "Write a JavaScript function named sumArray(arr) that returns the sum of the numbers in arr. Output only the code.",
+    category: "code",
+    description: "Must define sumArray and return",
+    check: { kind: "regex", all: ["sumArray\\s*(=|\\()", "return"] },
   },
 
   // Concurrent

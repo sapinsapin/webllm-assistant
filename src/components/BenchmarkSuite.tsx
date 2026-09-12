@@ -21,6 +21,7 @@ import {
 } from "@/lib/benchmark/spec";
 import { captureRunConditions, sampleBattery, type RunConditions } from "@/lib/benchmark/conditions";
 import { formatEnergyProxy } from "@/lib/benchmark/energy";
+import { checkOutput } from "@/lib/benchmark/outputCheck";
 import { EVAL_PROMPTS, computeScore, scoreResponse } from "@/lib/evals";
 import { asJson, isSchemaMismatch, stripMethodologyColumns } from "@/lib/supabaseCompat";
 
@@ -58,6 +59,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   long_context_4k: "bg-fuchsia-500",
   multi_turn: "bg-cyan-500",
   concurrent: "bg-rose-500",
+  structured: "bg-teal-500",
+  code: "bg-indigo-500",
 };
 
 interface AggregatedResult {
@@ -208,7 +211,12 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
               } else {
                 r = await runBenchmarkPrompt(bp.prompt, bp.category);
               }
-              if (r) allRuns.get(i)!.push(r);
+              if (r) {
+                // Accuracy gate per prompt: a wrong answer is recorded but
+                // never counts as a performance sample (see spec.aggregateRun).
+                r.passedCheck = checkOutput(bp.check, r.response);
+                allRuns.get(i)!.push(r);
+              }
             } catch (promptErr) {
               console.warn(`Benchmark prompt ${i} run ${run} failed:`, promptErr);
             }
@@ -414,6 +422,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
             prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
             timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
             promptChars: r.promptChars ?? null,
+            passedCheck: r.passedCheck ?? null,
           })),
           browser: device.browser, os: device.os, cores: device.cores,
           ram_gb: device.ram,
@@ -758,6 +767,14 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
                         )}
                         {agg && (
                           <div className="flex items-center gap-3 shrink-0 ml-2">
+                            {p.check && (() => {
+                              const passed = agg.runs.filter((r) => r.passedCheck).length;
+                              return (
+                                <span className={passed === agg.runs.length ? "text-emerald-400" : passed === 0 ? "text-red-400" : "text-amber-400"}>
+                                  {passed}/{agg.runs.length} correct
+                                </span>
+                              );
+                            })()}
                             {p.category.startsWith("long_context") && (() => {
                               const pf = agg.runs.map(prefillTps).filter((x): x is number => x != null);
                               return pf.length > 0 ? <span className="text-muted-foreground">prefill ~{(pf.reduce((a, b) => a + b, 0) / pf.length).toFixed(0)} tok/s</span> : null;

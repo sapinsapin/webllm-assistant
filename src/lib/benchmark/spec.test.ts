@@ -275,3 +275,28 @@ describe("prefill throughput estimate (4K-context item)", () => {
     expect(stats.validity.valid).toBe(true);
   });
 });
+
+describe("output-checked categories (5.6)", () => {
+  it("a failed output check never counts as a performance sample, and the pass rate is reported", () => {
+    const stats = aggregateRun([
+      ...healthySuite(),
+      sample({ category: "structured", tokensPerSecond: 500, passedCheck: false }),
+      sample({ category: "structured", tokensPerSecond: 20, passedCheck: true }),
+      sample({ category: "structured", tokensPerSecond: 22, passedCheck: true }),
+    ]);
+    const c = stats.categories.find((x) => x.category === "structured")!;
+    expect(c.runs).toBe(2);
+    expect(c.tps_p50).toBe(20); // nearest-rank median of [20, 22]; the 500 tok/s garbage never entered
+    expect(c.check_pass_rate).toBeCloseTo(2 / 3, 6);
+    expect(stats.validity.reasons).toContain("output check failed in structured");
+    expect(stats.validity.valid).toBe(true); // extended: doesn't affect validity
+    expect(stats.categories.find((x) => x.category === "short")!.check_pass_rate).toBeNull();
+  });
+
+  it("a checked category where every run failed is still reported, with a 0 pass rate", () => {
+    const stats = aggregateRun([...healthySuite(), sample({ category: "code", passedCheck: false })]);
+    const c = stats.categories.find((x) => x.category === "code")!;
+    expect(c.runs).toBe(0);
+    expect(c.check_pass_rate).toBe(0);
+  });
+});

@@ -32,6 +32,8 @@ export interface BenchmarkResult {
   response: string;
   /** Full prompt length in chars (for the prefill-throughput estimate). */
   promptChars?: number;
+  /** Output-check result for checked prompts (set by the suite). */
+  passedCheck?: boolean | null;
 }
 
 interface LlmInferenceContextValue {

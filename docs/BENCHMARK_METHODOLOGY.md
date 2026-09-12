@@ -19,7 +19,7 @@ The implementation of everything below is `src/lib/benchmark/spec.ts`
 | Standard scenarios | Single-stream (sequential, **90th-percentile latency**), Offline (throughput), 1024 queries / 60 s min | Single-stream suite: prompts sequential × 3 runs; **TTFT p90**, **TPS p50 (median)** per category. Concurrent category ≈ offline (extended) |
 | Accuracy gate | Every perf result must hit a quality target (e.g. TinyMMLU ≥ 61 %, IFEval-33) or it's invalid | **Quality smoke test**: 6 objective eval-suite prompts, keyword-scored; mean ≥ 0.5 required for `certified` |
 | Closed vs Open division | Closed = same reference model, apples-to-apples; Open = any model | `closed` = the engine's reference preset (`gemma-1b` / `webllm-llama-1b` / `onnx-smollm2-135m`); `open` = anything else |
-| Base / Extended / Experimental | Only base components contribute to the official score; extended (e.g. 4K/8K prompts) may not run on every system | Base categories (ttft, short, medium, long, reasoning) score; extended (long_context, long_context_4k, multi_turn, concurrent) are reported only; prompts exceeding the engine's context window are **skipped with a reason**, not failed |
+| Base / Extended / Experimental | Only base components contribute to the official score; extended (e.g. 4K/8K prompts) may not run on every system | Base categories (ttft, short, medium, long, reasoning) score; extended (long_context, long_context_4k, multi_turn, concurrent, structured, code) are reported only; prompts exceeding the engine's context window are **skipped with a reason**, not failed |
 | LLM metrics | TTFT + TPS (excl. first token); TPOT/TTFT constraints: interactive 500/30 ms, conversational 2000/100 ms | Same metrics; every run gets a `latency_class` — interactive / conversational / batch — from TTFT p90 and TPOT p50 |
 | Overall score | Per-category scores combined (MLPerf Client) | **Geometric mean** of base-category median tok/s (scale-robust, outlier-resistant) |
 | LoadGen validity | Minimum query counts, sanity checks, **audit** | `validateRun`: ≥ 3 valid runs per base category, per-sample sanity (finite, TTFT ≤ total, ≥ 4 tokens), throttling detection → `result_tier`; **reproducibility audit** demotes implausible outliers (§10) |
@@ -31,7 +31,7 @@ The implementation of everything below is `src/lib/benchmark/spec.ts`
 ## 2. Scoring rules
 
 ### 2.1 Run structure
-- The suite runs the 17 prompts in `BENCHMARK_PROMPTS` sequentially, **3 runs each** (the 4K-context prompt runs once; 49 generations), followed by the **6-prompt quality smoke test** (6 generations).
+- The suite runs the 21 prompts in `BENCHMARK_PROMPTS` sequentially, **3 runs each** (the 4K-context prompt runs once; 61 generations), followed by the **6-prompt quality smoke test** (6 generations).
 - No warm-up run is discarded; instead medians are used so a cold first run cannot dominate.
 
 ### 2.2 Per-run metrics
@@ -77,7 +77,7 @@ autonomous cloud routine works through unchecked items in order.
 - [x] **5.3 4K-context prompt** (MLPerf Client mandates 4K prompt lengths) as an extended category, with a prefill-throughput metric (prompt tokens/s).
 - [x] **5.4 Energy proxy** — MLPerf reports energy per stream; browsers can't measure power, but battery-level delta over the suite on mobile gives a comparable "battery % per 1k tokens" (conditions already capture battery level).
 - [x] **5.5 Reproducibility audit** — flag certified results whose device model has ≥ 5 runs and whose score is > 2× the device median (outlier demotion to `valid`).
-- [ ] **5.6 Structured-output and code tasks** (MLPerf Client base categories) as scored base prompts once the eval judge can gate them.
+- [ ] **5.6 Structured-output and code tasks** (MLPerf Client base categories) as scored base prompts once the eval judge can gate them. **Delivered in 2026.09 as extended, output-checked categories** (`structured`, `code` — §11; deterministic checks, no judge needed). **BLOCKED: promoting them to base tier changes what defines comparability, i.e. requires opening round 2026.10 — a product decision for the owner** (procedure in the changelog).
 - [x] **5.7 MCP parity for leaderboards** — `get_leaderboard` tool so external agents can query the same aggregates.
 
 ## 6. Leaderboards (implemented in 5.1 / 5.7)
@@ -114,3 +114,9 @@ autonomous cloud routine works through unchecked items in order.
 - Implemented as the Postgres view `benchmark_audit` (`flagged`, `effective_tier`, `device_median`, `device_runs`) over the shared `benchmark_device_key()` function; the leaderboard view excludes flagged rows. Computed at read time, so it self-heals as runs accumulate — no job, no mutation of submitted rows.
 - Only implausibly **high** scores are demoted: low scores are usually real (throttling, background load) and already explained by `conditions`; a high outlier can only be a measurement or reporting fault, and it is the one that would corrupt a ranking.
 - Mirror + tests: `src/lib/benchmark/audit.ts`; a parity test asserts the SQL carries the same thresholds. The feed shows an "⚠ outlier" badge (best effort — a missing view never breaks the feed).
+
+## 11. Structured-output and code tasks (delivered in 5.6)
+
+- MLPerf Client's base LLM categories include structured text and code analysis. We add `structured` (JSON object with required keys; JSON array) and `code` (Python `is_palindrome`, JavaScript `sumArray`) as **extended, output-checked** categories.
+- **Accuracy gate per prompt**: each prompt carries a declarative `check` (`json` with `requiredKeys` / `arrayMinLength`, or `regex` with `all` patterns), evaluated deterministically by `src/lib/benchmark/outputCheck.ts` — no LLM judge needed. A run whose output fails is recorded with `passedCheck:false`, listed in `validity.reasons`, and **never counts toward throughput**; the category reports `check_pass_rate`. The suite shows "n/3 correct" per prompt. The MCP mirror carries the same checks so agents apply the same rule.
+- **Tier**: extended in round 2026.09 (measured and reported, not scored). Promoting them to base — MLPerf Client's stance — changes the round's comparability inputs and so requires opening **round 2026.10** (see the changelog procedure). That promotion is the owner's call; everything else is in place.
