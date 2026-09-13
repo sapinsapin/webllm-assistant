@@ -55,7 +55,17 @@ parity-testing against the reference model requires it.
   renormalized weights today — DeepSeek needs SiLU + sigmoid/scaled; kernel
   lives in LiteRT proper and may need an upstream flag). Exit:
   single-layer parity + toy export; custom-op go/no-go recorded here.
-- **M3 — full Moonlight-16B convert (cloud, GPU + big-disk box)**:
+- **M3 — full Moonlight-16B convert** ✅ **DONE 2026-09-13** — completed
+  ON THE 32 GB M4 MAC (no GPU box needed): 4.8 h streamed fp32 convert
+  (peak RSS 16.4 GiB), int8 dynamic-range quantize to **15.09 GiB**
+  (3.9x, 261 s), parity vs fp32 eager reference cos ≥0.9937 with exact
+  argmax on all checked positions, coherent greedy smoke generation
+  (~0.5 s/token on CPU reference kernels once paged in). Full numbers
+  in [M3-results.md](./M3-results.md); tooling in `m3/` on the fork.
+  Two operational findings: the flatbuffer is fully self-contained
+  (weights.f32 staging blob deletable), and XNNPACK's fp32 FC repacking
+  makes the un-quantized model infeasible on 32 GB (use
+  BUILTIN_WITHOUT_DEFAULT_DELEGATES for fp32 checks). Original scope:
   checkpoint mapping, end-to-end logits parity on 32 prompts, then
   quantized `.litertlm` export. Watch: export writes an fp32 intermediate
   (~66 GB for 16.4B) and no int4 path exists for expert weights yet (int8
@@ -79,6 +89,17 @@ parity-testing against the reference model requires it.
 
 ## Checkpoint log
 
+- 2026-09-13 (M3 done): full Moonlight-16B converted, quantized and
+  verified on the M4 Mac — see M3-results.md. The first attempt's
+  supervising session stalled but the 4.8 h conversion itself succeeded;
+  a follow-up session did quantize + parity + smoke. int8 artifact:
+  15.09 GiB (kept locally at
+  ~/litert-torch-m3/artifacts/full-export/model_quantized.tflite; NOT
+  uploaded — exceeds phone RAM by design, it's the parity baseline for
+  M4 pruning). m3/ verification tooling pushed to the fork. Remaining
+  M3-deferred items: .litertlm bundling + on-device smoke (folds into
+  M4, where the artifact is phone-sized). LiteRT#9930 blocked on
+  Google CLA signature (user action).
 - 2026-09-12: **Upstream SiLU PR opened:**
   [google-ai-edge/LiteRT#9930](https://github.com/google-ai-edge/LiteRT/pull/9930)
   (fork `internetoftim/LiteRT`, branch `moe-silu-activation`) — adds
