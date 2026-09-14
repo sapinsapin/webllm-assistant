@@ -2,10 +2,11 @@ import { useState } from "react";
 import { AudioLines, Mic, Volume2, Play, Loader2, AlertCircle, Search, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
-  ASR_MODELS, TTS_MODELS, ASR_SAMPLES, TTS_SENTENCES,
-  runAsrBenchmark, runTtsBenchmark, checkRuntimeSupport, speechVerdict,
+  TTS_MODELS, ASR_SAMPLES, TTS_SENTENCES,
+  runTtsBenchmark, checkRuntimeSupport, speechVerdict,
   type AsrBenchmarkResult, type TtsBenchmarkResult, type RuntimeSupport,
 } from "@/lib/speech";
+import { ASR_ENGINES, getAsrEngine, type AsrEngineId } from "@/lib/speech-engines";
 
 const TONE_CLASS: Record<string, string> = {
   good: "text-primary",
@@ -31,7 +32,10 @@ const selectClass =
 export function SpeechBench() {
   const [tab, setTab] = useState<"asr" | "tts">("asr");
 
-  const [asrModel, setAsrModel] = useState(ASR_MODELS[0].id);
+  const [asrEngineId, setAsrEngineId] = useState<AsrEngineId>("transformers");
+  const asrEngine = getAsrEngine(asrEngineId);
+  const [asrModel, setAsrModel] = useState(asrEngine.models[0].id);
+  const [engineNote, setEngineNote] = useState<string | null>(null);
   const [asrSample, setAsrSample] = useState(ASR_SAMPLES[0].id);
   const [ttsModel, setTtsModel] = useState(TTS_MODELS[0].id);
   const [ttsSentence, setTtsSentence] = useState(TTS_SENTENCES[0]);
@@ -52,12 +56,24 @@ export function SpeechBench() {
     setStatusMsg(msg);
   };
 
+  const switchAsrEngine = (id: AsrEngineId) => {
+    const engine = getAsrEngine(id);
+    setAsrEngineId(id);
+    setAsrModel(engine.models[0].id);
+    setAsrResult(null); setError(null); setEngineNote(null);
+    // Probe availability up front so an unsupported engine (e.g. whisper.cpp
+    // on a page without COOP/COEP) is flagged before a run, not silently.
+    engine.isAvailable().then((a) => {
+      if (!a.supported) setEngineNote(a.reason ?? "This engine is not supported in this browser.");
+    });
+  };
+
   const runAsr = async () => {
-    const model = ASR_MODELS.find((m) => m.id === asrModel)!;
+    const model = asrEngine.models.find((m) => m.id === asrModel)!;
     const sample = ASR_SAMPLES.find((s) => s.id === asrSample)!;
     setRunning(true); setError(null); setAsrResult(null); setProgress(0);
     try {
-      setAsrResult(await runAsrBenchmark(model, sample, onProgress));
+      setAsrResult(await asrEngine.runBenchmark(model, sample, onProgress));
       toast.success("ASR benchmark complete");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
@@ -128,26 +144,48 @@ export function SpeechBench() {
         </div>
 
         {tab === "asr" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">ASR model</label>
-              <select className={selectClass} value={asrModel} onChange={(e) => setAsrModel(e.target.value)} disabled={running}>
-                {ASR_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name} · {m.size}</option>
-                ))}
-              </select>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {ASR_MODELS.find((m) => m.id === asrModel)?.description}
-              </p>
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Engine</label>
+                <select
+                  className={selectClass}
+                  value={asrEngineId}
+                  onChange={(e) => switchAsrEngine(e.target.value as AsrEngineId)}
+                  disabled={running}
+                >
+                  {ASR_ENGINES.map((eng) => (
+                    <option key={eng.id} value={eng.id}>{eng.label}</option>
+                  ))}
+                </select>
+                <p className="font-mono text-[10px] text-muted-foreground">{asrEngine.description}</p>
+              </div>
+              <div className="space-y-1">
+                <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">ASR model</label>
+                <select className={selectClass} value={asrModel} onChange={(e) => setAsrModel(e.target.value)} disabled={running}>
+                  {asrEngine.models.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name} · {m.size}</option>
+                  ))}
+                </select>
+                <p className="font-mono text-[10px] text-muted-foreground">
+                  {asrEngine.models.find((m) => m.id === asrModel)?.description}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Audio sample</label>
+                <select className={selectClass} value={asrSample} onChange={(e) => setAsrSample(e.target.value)} disabled={running}>
+                  {ASR_SAMPLES.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Audio sample</label>
-              <select className={selectClass} value={asrSample} onChange={(e) => setAsrSample(e.target.value)} disabled={running}>
-                {ASR_SAMPLES.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-              </select>
-            </div>
+            {engineNote && (
+              <div className="flex items-start gap-2 rounded-md border border-orange-400/40 bg-orange-400/10 p-2">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-400" />
+                <p className="font-mono text-[11px] text-orange-400">{engineNote}</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
