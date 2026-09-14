@@ -89,6 +89,12 @@ parity-testing against the reference model requires it.
 
 ## Checkpoint log
 
+- 2026-09-15: M4 started on the M4 Mac: REAP-style router-guided expert
+  pruning (64→24 and 64→16 variants), bits-per-byte quality eval vs the
+  unpruned baseline and google/gemma-4-E2B-it, then convert+quantize the
+  winner through the M3 pipeline; .litertlm bundling best-effort (no
+  physical device available). LiteRT#9930 still blocked on CLA
+  (cla/google=failure — needs the user's signature).
 - 2026-09-13 (M3 done): full Moonlight-16B converted, quantized and
   verified on the M4 Mac — see M3-results.md. The first attempt's
   supervising session stalled but the 4.8 h conversion itself succeeded;
