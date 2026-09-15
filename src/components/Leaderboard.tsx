@@ -4,6 +4,7 @@ import { AlertCircle, RotateCcw, Trophy, Smartphone, Monitor, Tablet } from "luc
 import { supabase } from "@/integrations/supabase/client";
 import { isSchemaMismatch } from "@/lib/supabaseCompat";
 import { METHODOLOGY_VERSION, type Division } from "@/lib/benchmark/spec";
+import { RoundPicker } from "@/components/RoundPicker";
 import {
   CONFIDENCE_LABEL,
   confidenceFor,
@@ -16,11 +17,11 @@ const LIMIT = 50;
 
 /** Fetch the per-device leaderboard for one round + division. Throws on
  * error so React Query surfaces a real error state — never an empty board. */
-async function fetchLeaderboard(division: Division): Promise<{ unavailable: boolean; rows: LeaderboardRow[] }> {
+async function fetchLeaderboard(division: Division, round: string): Promise<{ unavailable: boolean; rows: LeaderboardRow[] }> {
   const { data, error } = await supabase
     .from("benchmark_leaderboard")
     .select("*")
-    .eq("spec_version", METHODOLOGY_VERSION)
+    .eq("spec_version", round)
     .eq("division", division)
     .order("score_p50", { ascending: false })
     .limit(LIMIT);
@@ -46,11 +47,12 @@ const CONFIDENCE_CLS: Record<string, string> = {
 
 export function Leaderboard() {
   const [division, setDivision] = useState<Division>("closed");
+  const [round, setRound] = useState<string>(METHODOLOGY_VERSION);
   const [engineFilter, setEngineFilter] = useState<string | null>(null);
 
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["benchmark_leaderboard", METHODOLOGY_VERSION, division],
-    queryFn: () => fetchLeaderboard(division),
+    queryKey: ["benchmark_leaderboard", round, division],
+    queryFn: () => fetchLeaderboard(division, round),
     placeholderData: keepPreviousData,
     retry: 2,
     staleTime: 60_000,
@@ -68,9 +70,10 @@ export function Leaderboard() {
         <div className="flex-1 min-w-[12rem]">
           <h2 className="text-sm font-bold font-mono text-foreground">Device Leaderboard</h2>
           <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-            Median of certified runs per device · round {METHODOLOGY_VERSION} · {division === "closed" ? "reference model per engine" : "any model"}
+            Median of certified runs per device · round {round} · {division === "closed" ? "reference model per engine" : "any model"}
           </p>
         </div>
+        <RoundPicker value={round} onChange={(r) => { setRound(r); setEngineFilter(null); }} />
         <div className="flex items-center gap-1 text-[11px] font-mono" role="tablist" aria-label="Division">
           {(["closed", "open"] as Division[]).map((d) => (
             <button
@@ -115,7 +118,7 @@ export function Leaderboard() {
         </p>
       ) : rows.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground py-8 px-4">
-          No certified {division}-division runs in round {METHODOLOGY_VERSION} yet. Run the test suite to be first.
+          No certified {division}-division runs in round {round} yet. Run the test suite to be first.
         </p>
       ) : (
         <>

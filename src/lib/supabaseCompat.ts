@@ -9,6 +9,13 @@
  * a *known, temporary* condition, distinct from a real fetch error.
  */
 
+import type { Json } from "@/integrations/supabase/types";
+
+/** Plain data objects (interfaces without index signatures) aren't assignable
+ * to the generated `Json` type; this is the one sanctioned cast for jsonb
+ * columns — only ever pass JSON-serialisable data. */
+export const asJson = (value: unknown): Json => value as Json;
+
 export interface PostgrestErrorLike {
   code?: string | null;
   message?: string | null;

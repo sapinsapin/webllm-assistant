@@ -22,6 +22,8 @@ interface PipelineProgress {
  * Works on ALL browsers including iOS Safari via WASM backend.
  */
 export class OnnxEngine implements InferenceEngine {
+  /** conservative: WASM prefill beyond this is impractically slow. */
+  readonly maxContextTokens = 2048;
   readonly type = "onnx" as const;
   readonly label = "Transformers.js (WASM)";
   private generator: TextGenerationPipeline | null = null;

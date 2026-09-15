@@ -6,10 +6,18 @@
  * every field is nullable; nothing here may throw.
  */
 
+import { computeEnergyProxy, type BatterySample, type EnergyProxy } from "./energy";
+
 export interface RunConditions {
-  /** navigator.getBattery() — Chrome/Android only. */
+  /** navigator.getBattery() at the END of the suite — Chrome/Android only. */
   battery_charging: boolean | null;
   battery_level: number | null;
+  /** …and at the START, so the drop across the suite can be computed. */
+  battery_level_start: number | null;
+  battery_charging_start: boolean | null;
+  /** Battery % per 1k generated tokens (MLPerf energy-per-stream proxy);
+   * carries its own validity + reason. */
+  energy: EnergyProxy;
   /** Tab was hidden at some point during the run (throttled timers/GPU). */
   page_hidden_during_run: boolean;
   /** navigator.connection.effectiveType, where available. */
@@ -23,22 +31,33 @@ interface BatteryLike {
   level: number;
 }
 
-export async function captureRunConditions(extra: {
-  pageHiddenDuringRun: boolean;
-  suiteDurationMs: number | null;
-}): Promise<RunConditions> {
-  let battery_charging: boolean | null = null;
-  let battery_level: number | null = null;
+/** Read the battery once; nulls when the API is missing or blocked. Call at
+ * suite start and again at the end. */
+export async function sampleBattery(): Promise<BatterySample> {
   try {
     const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
     if (typeof nav.getBattery === "function") {
       const b = await nav.getBattery();
-      battery_charging = typeof b.charging === "boolean" ? b.charging : null;
-      battery_level = typeof b.level === "number" ? b.level : null;
+      return {
+        charging: typeof b.charging === "boolean" ? b.charging : null,
+        level: typeof b.level === "number" ? b.level : null,
+      };
     }
   } catch {
     // unsupported or blocked by permissions policy
   }
+  return { charging: null, level: null };
+}
+
+export async function captureRunConditions(extra: {
+  pageHiddenDuringRun: boolean;
+  suiteDurationMs: number | null;
+  batteryStart: BatterySample | null;
+  totalTokens: number;
+}): Promise<RunConditions> {
+  const end = await sampleBattery();
+  const battery_charging = end.charging;
+  const battery_level = end.level;
 
   let network_type: string | null = null;
   try {
@@ -51,6 +70,9 @@ export async function captureRunConditions(extra: {
   return {
     battery_charging,
     battery_level,
+    battery_level_start: extra.batteryStart?.level ?? null,
+    battery_charging_start: extra.batteryStart?.charging ?? null,
+    energy: computeEnergyProxy({ start: extra.batteryStart, end, totalTokens: extra.totalTokens }),
     page_hidden_during_run: extra.pageHiddenDuringRun,
     network_type,
     suite_duration_ms: extra.suiteDurationMs,

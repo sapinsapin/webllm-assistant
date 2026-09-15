@@ -11,15 +11,19 @@ import {
   QUALITY_SMOKE_PROMPT_IDS,
   aggregateRun,
   divisionFor,
+  estimatePromptTokens,
   getVerdict,
+  prefillTps,
   qualityScoreFrom,
   resultTierFor,
   type ResultTier,
   type RunStats,
 } from "@/lib/benchmark/spec";
-import { captureRunConditions, type RunConditions } from "@/lib/benchmark/conditions";
+import { captureRunConditions, sampleBattery, type RunConditions } from "@/lib/benchmark/conditions";
+import { formatEnergyProxy } from "@/lib/benchmark/energy";
+import { checkOutput } from "@/lib/benchmark/outputCheck";
 import { EVAL_PROMPTS, computeScore, scoreResponse } from "@/lib/evals";
-import { isSchemaMismatch, stripMethodologyColumns } from "@/lib/supabaseCompat";
+import { asJson, isSchemaMismatch, stripMethodologyColumns } from "@/lib/supabaseCompat";
 
 type Phase = "idle" | "downloading" | "benchmarking" | "done";
 
@@ -52,8 +56,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   long: "bg-yellow-500",
   reasoning: "bg-orange-400",
   long_context: "bg-purple-500",
+  long_context_4k: "bg-fuchsia-500",
   multi_turn: "bg-cyan-500",
   concurrent: "bg-rose-500",
+  structured: "bg-teal-500",
+  code: "bg-indigo-500",
 };
 
 interface AggregatedResult {
@@ -92,13 +99,24 @@ interface BenchmarkSuiteProps {
   onComplete?: () => void;
 }
 
-const perfSteps = BENCHMARK_PROMPTS.length * RUNS_PER_PROMPT;
+const runsFor = (bp: { runs?: number }) => bp.runs ?? RUNS_PER_PROMPT;
+const perfSteps = BENCHMARK_PROMPTS.reduce((n, bp) => n + runsFor(bp), 0);
 const totalSteps = perfSteps + QUALITY_PROMPTS.length;
+
+/** MLPerf "extended components may not run on all systems": a prompt whose
+ * estimated tokens exceed the engine's context window is skipped with a
+ * reason rather than failed. Output headroom keeps the answer from being cut. */
+const OUTPUT_HEADROOM_TOKENS = 256;
+function contextSkipReason(bp: { prompt: string; context?: string }, maxContextTokens: number | undefined): string | null {
+  if (!maxContextTokens) return null;
+  const needed = estimatePromptTokens((bp.context ? bp.context.length + 2 : 0) + bp.prompt.length) + OUTPUT_HEADROOM_TOKENS;
+  return needed > maxContextTokens ? `needs ~${needed} tokens of context; this engine allows ${maxContextTokens}` : null;
+}
 
 export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const {
     status, statusMessage, downloadProgress, activeEngine, capabilities, currentModelName, lastBenchmarkError,
-    loadModel, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark,
+    loadModel, runBenchmarkPrompt, runLongContextBenchmark, runMultiTurnBenchmark, runConcurrentBenchmark, engineRef,
   } = useLlmInference();
 
   // Mirror the latest benchmark error into a ref so the long-running async
@@ -130,6 +148,8 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
   const [qualityScore, setQualityScore] = useState<number | null>(null);
   const [resultTier, setResultTier] = useState<ResultTier | null>(null);
   const [qualityIdx, setQualityIdx] = useState(-1);
+  const [skipped, setSkipped] = useState<Record<number, string>>({});
+  const [conditions, setConditions] = useState<RunConditions | null>(null);
   const autoSubmittedRef = useRef(false);
   // Run conditions: MLPerf Mobile's "test conditions" principle — record
   // whether the tab was backgrounded (browsers throttle hidden tabs).
@@ -156,13 +176,26 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
 
     (async () => {
       try {
+        // Energy proxy: battery level before any inference (see energy.ts).
+        const batteryStart = await sampleBattery();
         const allRuns: Map<number, BenchmarkResult[]> = new Map();
+        const skips: Record<number, string> = {};
+        let attemptedRuns = 0;
         let step = 0;
 
         for (let i = 0; i < BENCHMARK_PROMPTS.length; i++) {
           allRuns.set(i, []);
-          for (let run = 0; run < RUNS_PER_PROMPT; run++) {
+          const bp0 = BENCHMARK_PROMPTS[i];
+          const skipReason = contextSkipReason(bp0, engineRef.current?.maxContextTokens);
+          if (skipReason) {
+            skips[i] = skipReason;
+            setSkipped({ ...skips });
+            step += runsFor(bp0);
+            continue;
+          }
+          for (let run = 0; run < runsFor(bp0); run++) {
             if (cancelled) break;
+            attemptedRuns++;
             setCurrentPromptIdx(i);
             setCurrentRun(run + 1);
             setProgress((step / totalSteps) * 100);
@@ -178,7 +211,12 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
               } else {
                 r = await runBenchmarkPrompt(bp.prompt, bp.category);
               }
-              if (r) allRuns.get(i)!.push(r);
+              if (r) {
+                // Accuracy gate per prompt: a wrong answer is recorded but
+                // never counts as a performance sample (see spec.aggregateRun).
+                r.passedCheck = checkOutput(bp.check, r.response);
+                allRuns.get(i)!.push(r);
+              }
             } catch (promptErr) {
               console.warn(`Benchmark prompt ${i} run ${run} failed:`, promptErr);
             }
@@ -234,10 +272,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           return;
         }
 
-        const failedRuns = perfSteps - succeededRuns;
+        const failedRuns = attemptedRuns - succeededRuns;
         if (failedRuns > 0) {
           toast({
-            title: `${failedRuns} of ${perfSteps} runs failed`,
+            title: `${failedRuns} of ${attemptedRuns} runs failed`,
             description: lastErrRef.current
               ? `Last error: ${lastErrRef.current}. The verdict is based on the ${succeededRuns} runs that completed.`
               : `The verdict is based on the ${succeededRuns} runs that completed.`,
@@ -276,7 +314,10 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
         const conditions = await captureRunConditions({
           pageHiddenDuringRun: hiddenDuringRunRef.current,
           suiteDurationMs: performance.now() - suiteStart,
+          batteryStart,
+          totalTokens: agg.flatMap((a) => a.runs).reduce((n, r) => n + r.tokensGenerated, 0),
         });
+        setConditions(conditions);
 
         // Detect device, then auto-submit immediately so no result is lost.
         // Users can refine device/GPU/RAM afterwards via the "Edit details" button.
@@ -338,6 +379,8 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
     setQualityScore(null);
     setResultTier(null);
     setQualityIdx(-1);
+    setSkipped({});
+    setConditions(null);
     autoSubmittedRef.current = false;
   };
 
@@ -372,12 +415,14 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
           latency_class: runStats.latency_class,
           quality_score: quality,
           result_tier: tier,
-          validity: runStats.validity,
-          stats: { categories: runStats.categories, thermal_decay: runStats.thermal_decay },
-          conditions: { ...conditions },
+          validity: asJson(runStats.validity),
+          stats: asJson({ categories: runStats.categories, thermal_decay: runStats.thermal_decay }),
+          conditions: asJson(conditions),
           results: allResults.map((r) => ({
             prompt: r.prompt, category: r.category, tokensGenerated: r.tokensGenerated,
             timeMs: r.timeMs, tokensPerSecond: r.tokensPerSecond, ttftMs: r.ttftMs, tpotMs: r.tpotMs,
+            promptChars: r.promptChars ?? null,
+            passedCheck: r.passedCheck ?? null,
           })),
           browser: device.browser, os: device.os, cores: device.cores,
           ram_gb: device.ram,
@@ -460,7 +505,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
         <div className="flex-1">
           <h2 className="text-sm font-bold font-mono text-foreground">Can I AI? — Full Test Suite</h2>
           <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-            {BENCHMARK_PROMPTS.length} prompts × {RUNS_PER_PROMPT} runs + {QUALITY_PROMPTS.length}-prompt quality check · methodology {METHODOLOGY_VERSION} (MLPerf-style percentiles &amp; accuracy gate)
+            {BENCHMARK_PROMPTS.length} prompts ({perfSteps} runs) + {QUALITY_PROMPTS.length}-prompt quality check · methodology {METHODOLOGY_VERSION} (MLPerf-style percentiles &amp; accuracy gate)
           </p>
         </div>
         {phase === "idle" && (
@@ -506,6 +551,11 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
               )}
               {stats.thermal_decay < 0.7 && (
                 <span className="rounded-md border border-orange-400/30 bg-orange-400/10 px-2 py-0.5 text-orange-400">throttled</span>
+              )}
+              {formatEnergyProxy(conditions?.energy) && (
+                <span className="rounded-md border border-border bg-secondary/40 px-2 py-0.5 text-muted-foreground" title="Battery Status API level drop across the suite — a proxy, valid only on battery">
+                  {formatEnergyProxy(conditions?.energy)}
+                </span>
               )}
             </div>
           )}
@@ -654,7 +704,7 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
                 ? `Downloading ${model?.name} (${model?.size})…`
                 : qualityIdx >= 0
                   ? `Quality check ${qualityIdx + 1}/${QUALITY_PROMPTS.length}`
-                  : `Prompt ${currentPromptIdx + 1}/${BENCHMARK_PROMPTS.length} · run ${currentRun}/${RUNS_PER_PROMPT}`}
+                  : `Prompt ${currentPromptIdx + 1}/${BENCHMARK_PROMPTS.length} · run ${currentRun}/${runsFor(BENCHMARK_PROMPTS[Math.max(0, currentPromptIdx)] ?? {})}`}
             </span>
             <span className="text-foreground font-semibold">{Math.round(phase === "downloading" ? downloadProgress : progress)}%</span>
           </div>
@@ -703,16 +753,32 @@ export function BenchmarkSuite({ onComplete }: BenchmarkSuiteProps) {
                           {isRunning && (
                             <>
                               <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
-                              <span className="text-muted-foreground shrink-0">run {currentRun}/{RUNS_PER_PROMPT}</span>
+                              <span className="text-muted-foreground shrink-0">run {currentRun}/{runsFor(p)}</span>
                             </>
                           )}
                           {agg && <span className="text-primary shrink-0">✓</span>}
-                          {!isRunning && !agg && <span className="text-muted-foreground/30 shrink-0">○</span>}
+                          {!isRunning && !agg && skipped[p.idx] && <span className="text-muted-foreground shrink-0" title={skipped[p.idx]}>⤼</span>}
+                          {!isRunning && !agg && !skipped[p.idx] && <span className="text-muted-foreground/30 shrink-0">○</span>}
                           <span className="text-foreground font-medium">{p.label}</span>
                           <span className="text-muted-foreground truncate hidden sm:inline">— {p.description}</span>
                         </div>
+                        {!agg && skipped[p.idx] && (
+                          <span className="text-[10px] text-muted-foreground shrink-0 ml-2">skipped — {skipped[p.idx]}</span>
+                        )}
                         {agg && (
                           <div className="flex items-center gap-3 shrink-0 ml-2">
+                            {p.check && (() => {
+                              const passed = agg.runs.filter((r) => r.passedCheck).length;
+                              return (
+                                <span className={passed === agg.runs.length ? "text-emerald-400" : passed === 0 ? "text-red-400" : "text-amber-400"}>
+                                  {passed}/{agg.runs.length} correct
+                                </span>
+                              );
+                            })()}
+                            {p.category.startsWith("long_context") && (() => {
+                              const pf = agg.runs.map(prefillTps).filter((x): x is number => x != null);
+                              return pf.length > 0 ? <span className="text-muted-foreground">prefill ~{(pf.reduce((a, b) => a + b, 0) / pf.length).toFixed(0)} tok/s</span> : null;
+                            })()}
                             <span className="text-primary font-semibold">{agg.meanTps.toFixed(1)} <span className="text-muted-foreground font-normal">±{agg.stdTps.toFixed(1)}</span> tok/s</span>
                             <span className="text-muted-foreground">{agg.meanTtft.toFixed(0)}±{agg.stdTtft.toFixed(0)}ms</span>
                           </div>

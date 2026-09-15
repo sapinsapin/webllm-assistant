@@ -51,6 +51,9 @@ export interface InferenceEngine {
   ): Promise<void>;
 
   generateFull(prompt: string): Promise<GenerationResult>;
+  /** Total context window (prompt + output) in tokens, when the engine knows
+   * it. Benchmarks skip prompts that would not fit instead of failing. */
+  readonly maxContextTokens?: number;
 
   formatPrompt(messages: Array<{ role: "user" | "assistant"; content: string }>): string;
 }
